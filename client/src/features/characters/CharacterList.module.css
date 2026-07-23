@@ -1,0 +1,113 @@
+.page {
+  padding: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.createButton {
+  padding: 0.5rem 1rem;
+  background: var(--accent, #4a9eff);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.createButton:hover {
+  opacity: 0.9;
+}
+
+.statusText {
+  color: var(--text-secondary, #a0a0a0);
+  text-align: center;
+  padding: 2rem;
+}
+
+.errorText {
+  color: var(--error, #ff6b6b);
+  text-align: center;
+  padding: 2rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--surface, #2a2a2a);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 8px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.card:hover {
+  border-color: var(--accent, #4a9eff);
+}
+
+.cardName {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+  margin-bottom: 0.25rem;
+}
+
+.cardMeta {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #a0a0a0);
+  margin-bottom: 0.5rem;
+}
+
+.cardStats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+.statBadge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.statLabel {
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.backButton {
+  background: none;
+  border: none;
+  color: var(--accent, #4a9eff);
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0;
+}
+
+.backButton:hover {
+  text-decoration: underline;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary, #a0a0a0);
+}

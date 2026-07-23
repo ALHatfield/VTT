@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "prisma.prisma",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "clinyong.vscode-css-modules",
+    "ms-vscode.vscode-typescript-next",
+    "github.copilot",
+    "github.copilot-chat"
+  ]
+}

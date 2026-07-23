@@ -1,0 +1,275 @@
+.panel {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-secondary, #16213e);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.header {
+  padding: 10px 14px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted, #8b8b9e);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Connection status pill */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.statusConnected .statusDot {
+  background: #4ade80;
+}
+
+.statusConnected {
+  color: #4ade80;
+}
+
+.statusDisconnected .statusDot {
+  background: #f87171;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.statusDisconnected {
+  color: #f87171;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.empty {
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.8rem;
+  text-align: center;
+  margin-top: 24px;
+}
+
+/* Message rows */
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.msgUsername {
+  font-weight: 600;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.72rem;
+}
+
+.msgText {
+  color: var(--color-text-primary, #e8e8e8);
+  word-break: break-word;
+}
+
+/* roll type — green left border */
+.type_roll {
+  border-left: 3px solid #4ade80;
+  padding-left: 8px;
+}
+
+/* system type — centered italic */
+.type_system {
+  align-items: center;
+}
+
+.systemText {
+  font-style: italic;
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #8b8b9e);
+  text-align: center;
+}
+
+/* Error and disconnected banners */
+.errorBanner {
+  margin: 0 10px 6px;
+  padding: 6px 10px;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 6px;
+  color: #f87171;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.errorDismiss {
+  background: none;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.disconnectedBanner {
+  margin: 0 10px 6px;
+  padding: 5px 10px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 6px;
+  color: #fbbf24;
+  font-size: 0.72rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.inputRow {
+  padding: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.textarea {
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+  resize: none;
+  box-sizing: border-box;
+}
+
+.textarea::placeholder {
+  color: var(--color-text-muted, #8b8b9e);
+}
+
+.textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.textarea:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Keep old .input class in case something references it */
+.input {
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--color-text-muted, #8b8b9e);
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------------------
+ * Roll message breakdown (Phase 4E)
+ * --------------------------------------------------------------------------- */
+
+.rollBreakdown {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 0.82rem;
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+.rollFormula {
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.72rem;
+  width: 100%;
+}
+
+.rollDice {
+  display: flex;
+  gap: 4px;
+}
+
+.rollDieKept {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 1px 5px;
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  border-radius: 4px;
+  color: #4ade80;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.rollDieDropped {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.82rem;
+  text-decoration: line-through;
+}
+
+.rollModifier {
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.78rem;
+}
+
+.rollTotal {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #4ade80;
+  margin-left: 2px;
+}
+

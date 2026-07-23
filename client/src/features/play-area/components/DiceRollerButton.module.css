@@ -1,0 +1,119 @@
+.wrapper {
+  position: relative;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(22, 33, 62, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn:hover {
+  background: rgba(22, 33, 62, 0.95);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* ── Dropdown menu ── */
+
+.menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(16, 24, 48, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 210px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.diceGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.dieBtn {
+  padding: 6px 4px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.dieBtn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.customRow {
+  display: flex;
+  gap: 6px;
+}
+
+.customInput {
+  flex: 1;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 0.8rem;
+  font-family: inherit;
+  outline: none;
+}
+
+.customInput::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.customInput:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.rollBtn {
+  padding: 5px 10px;
+  background: rgba(74, 111, 220, 0.8);
+  border: 1px solid rgba(74, 111, 220, 0.5);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.rollBtn:hover:not(:disabled) {
+  background: rgba(74, 111, 220, 1);
+}
+
+.rollBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+

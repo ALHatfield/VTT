@@ -1,0 +1,291 @@
+.card {
+  position: absolute;
+  z-index: 20;
+  background: rgba(20, 20, 35, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 10px 12px;
+  min-width: 150px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+/* Hover state — passive, non-interactive */
+.hover {
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* Selected state — pinned, interactive */
+.selected {
+  opacity: 1;
+  pointer-events: auto;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ── Pointer arrows ─────────────────────────────────────────── */
+
+/* Arrow on the left side, pointing left (card is right of cursor) */
+.pointerLeft::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 6px solid rgba(20, 20, 35, 0.95);
+}
+
+/* Arrow on the right side, pointing right (card is left of cursor) */
+.pointerRight::before {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 6px solid rgba(20, 20, 35, 0.95);
+}
+
+/* Arrow on the top, pointing up (card is below token) */
+.pointerUp::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid rgba(20, 20, 35, 0.95);
+}
+
+/* Arrow on the bottom, pointing down (card is above token) */
+.pointerDown::before {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid rgba(20, 20, 35, 0.95);
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+
+.closeButton {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.closeButton:hover {
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+/* Token header: avatar + name/type block */
+.tokenHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 7px;
+  padding-right: 16px; /* space for close button */
+}
+
+/* Avatar: 32×32 token image or color swatch */
+.tokenAvatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.tokenAvatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tokenAvatarFallback {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.tokenInfo {
+  min-width: 0;
+  flex: 1;
+}
+
+.name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #e8e8e8);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.typeLine {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.typeBadge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #8b8b9e);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.typeBadgeAlly {
+  color: #51cf66;
+  border-color: rgba(81, 207, 102, 0.35);
+  background: rgba(81, 207, 102, 0.1);
+}
+
+.typeBadgeEnemy {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.ownerName {
+  font-size: 0.65rem;
+  color: var(--color-text-muted, #8b8b9e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── HP Bar ─────────────────────────────────────────────────── */
+
+.hpSection {
+  margin-bottom: 4px;
+}
+
+.hpBar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 3px;
+}
+
+.hpFill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.15s ease;
+}
+
+.healthy { background: #4caf6e; }
+.wounded { background: #f0a030; }
+.critical { background: #e05050; }
+.dead { background: #555; }
+
+.hpRow {
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+.hpValue {
+  font-variant-numeric: tabular-nums;
+}
+
+.hpEditable {
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.4);
+}
+
+.hpEditable:hover {
+  border-bottom-color: rgba(255, 255, 255, 0.8);
+}
+
+.hpMax {
+  color: var(--color-text-muted, #8b8b9e);
+}
+
+.hpInput {
+  width: 48px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 0.75rem;
+  padding: 1px 4px;
+  text-align: center;
+}
+
+.hpInput:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* ── Stat row (AC etc.) ─────────────────────────────────────── */
+
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--color-text-primary, #e8e8e8);
+  margin-top: 2px;
+}
+
+.statLabel {
+  color: var(--color-text-muted, #8b8b9e);
+}
+
+.statValue {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Quick rolls ────────────────────────────────────────────── */
+
+.quickRolls {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.rollButton {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 0.7rem;
+  padding: 4px 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.rollButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.rollButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

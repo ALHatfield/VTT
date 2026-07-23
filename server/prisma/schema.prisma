@@ -1,0 +1,319 @@
+// This is your Prisma schema file.
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Models are added per feature phase:
+// - User:         auth Phase 1A
+// - Campaign:     campaigns Phase 3A
+// - Scene, Token: play-area Phase 4A
+// - Character:    characters Phase 6A
+
+/// User accounts (pre-seeded for MVP)
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  campaigns   CampaignPlayer[]
+  ownedTokens Token[]          @relation("TokenOwner")
+  fogRegions  FogRegion[]
+  characters  Character[]      @relation("CharacterOwner")
+
+  @@map("users")
+}
+
+/// Session store for express-session (connect-pg-simple)
+model Session {
+  sid    String   @id
+  sess   Json
+  expire DateTime
+
+  @@index([expire])
+  @@map("session")
+}
+
+// ---------------------------------------------------------------------------
+// Campaign models (Phase 3A)
+// ---------------------------------------------------------------------------
+
+enum CampaignRole {
+  dm
+  player
+  observer
+
+  @@map("campaign_role")
+}
+
+/// A campaign — the top-level workspace for a TTRPG session
+model Campaign {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  members    CampaignPlayer[]
+  scenes     Scene[]
+  tokens     Token[]
+  messages   CampaignMessage[]
+  fogRegions FogRegion[]
+  characters Character[]
+  tileAssets TileAsset[]
+  tilePlacements TilePlacement[]
+
+  @@map("campaigns")
+}
+
+/// Join table linking users to campaigns with a role
+model CampaignPlayer {
+  id         String       @id @default(uuid())
+  campaignId String       @map("campaign_id")
+  userId     String       @map("user_id")
+  role       CampaignRole
+  joinedAt   DateTime     @default(now()) @map("joined_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([userId])
+  @@map("campaign_players")
+}
+
+// ---------------------------------------------------------------------------
+// Play Area models (Phase 4B)
+// ---------------------------------------------------------------------------
+
+enum TokenType {
+  player
+  monster
+  npc
+  misc
+
+  @@map("token_type")
+}
+
+/// NPC subtype — distinguishes friendly (ally) from hostile (enemy) NPCs (Phase 4F.2)
+enum NpcSubtype {
+  ally
+  enemy
+
+  @@map("npc_subtype")
+}
+
+/// A scene (map) within a campaign that hosts tokens
+model Scene {
+  id         String   @id @default(uuid())
+  campaignId String   @map("campaign_id")
+  name       String
+  imageUrl   String?  @map("image_url")
+  width      Int      @default(2048)
+  height     Int      @default(2048)
+  cellSize   Int      @default(64) @map("cell_size")
+  isActive   Boolean  @default(false) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  tokens   Token[]
+  fogRegions FogRegion[]
+  tilePlacements TilePlacement[]
+
+  @@index([campaignId])
+  @@map("scenes")
+}
+
+/// An interactive token placed on a scene
+model Token {
+  id         String    @id @default(uuid())
+  sceneId    String    @map("scene_id")
+  campaignId String    @map("campaign_id")
+  ownerId    String?   @map("owner_id")
+  name       String
+  type       TokenType
+  x          Int       @default(0)
+  y          Int       @default(0)
+  size       Int       @default(1)
+  color      String    @default("#4a9eff")
+  iconUrl    String?   @map("icon_url")
+  hp           Int?
+  maxHp        Int?      @map("max_hp")
+  ac           Int?
+  visionRadius Int       @default(6) @map("vision_radius")
+  /// Only set when type = 'npc'; null for all other token types (Phase 4F.2)
+  npcSubtype   NpcSubtype? @map("npc_subtype")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  scene    Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  owner    User?    @relation("TokenOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([sceneId])
+  @@index([campaignId])
+  @@map("tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Chat models (Phase 4D)
+// ---------------------------------------------------------------------------
+
+enum MessageType {
+  chat
+  roll
+  system
+
+  @@map("message_type")
+}
+
+/// A persisted chat message within a campaign
+model CampaignMessage {
+  id         String      @id @default(uuid())
+  campaignId String      @map("campaign_id")
+  userId     String      @map("user_id")
+  username   String
+  text       String
+  type       MessageType @default(chat)
+  rollData   Json?       @map("roll_data")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, createdAt])
+  @@map("campaign_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Fog of war models (Phase 4F)
+// ---------------------------------------------------------------------------
+
+/// A revealed fog polygon on a scene.
+model FogRegion {
+  id              String   @id @default(uuid())
+  campaignId      String   @map("campaign_id")
+  sceneId         String   @map("scene_id")
+  createdByUserId String   @map("created_by_user_id")
+  vertices        Json
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scene    Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, sceneId])
+  @@map("fog_regions")
+}
+
+// ---------------------------------------------------------------------------
+// Character models (Phase 6A)
+// ---------------------------------------------------------------------------
+
+/// A character sheet belonging to a user within a campaign
+model Character {
+  id              String   @id @default(uuid())
+  campaignId      String   @map("campaign_id")
+  userId          String   @map("user_id")
+  name            String
+  race            String
+  class           String
+  level           Int      @default(1)
+  abilityScores   Json     @map("ability_scores")
+  hp              Int
+  maxHp           Int      @map("max_hp")
+  ac              Int      @default(10)
+  proficiencyBonus Int     @default(2) @map("proficiency_bonus")
+  speed           Int      @default(30)
+  portraitUrl     String?  @map("portrait_url")
+  biography       String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation("CharacterOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([userId])
+  @@map("characters")
+}
+
+// ---------------------------------------------------------------------------
+// Editor models (Phase 5A)
+// ---------------------------------------------------------------------------
+
+enum AssetCategory {
+  background
+  playground
+  foreground
+
+  @@map("asset_category")
+}
+
+enum AssetSource {
+  uploaded
+  builtin
+
+  @@map("asset_source")
+}
+
+/// A tile asset uploaded to a campaign's asset library
+model TileAsset {
+  id           String        @id @default(uuid())
+  campaignId   String?       @map("campaign_id")
+  filename     String
+  url          String
+  thumbnailUrl String        @map("thumbnail_url")
+  width        Int
+  height       Int
+  category     AssetCategory @default(background)
+  source       AssetSource   @default(uploaded)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  placements TilePlacement[]
+
+  @@index([campaignId])
+  @@map("tile_assets")
+}
+
+// ---------------------------------------------------------------------------
+// Editor models (Phase 5B)
+// ---------------------------------------------------------------------------
+
+/// A tile asset placed on a scene at a specific position and transform
+model TilePlacement {
+  id         String        @id @default(uuid())
+  sceneId    String        @map("scene_id")
+  assetId    String        @map("asset_id")
+  campaignId String        @map("campaign_id")
+  x          Float         @default(0)
+  y          Float         @default(0)
+  width      Float
+  height     Float
+  rotation   Float         @default(0)
+  zIndex     Int           @default(0) @map("z_index")
+  category   AssetCategory
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  scene    Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  asset    TileAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  campaign Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([sceneId])
+  @@index([campaignId])
+  @@map("tile_placements")
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@vtt/shared",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo 'shared uses raw TS exports — no build step needed'",
+    "lint": "echo 'shared types are checked by consuming packages'"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

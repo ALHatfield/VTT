@@ -1,0 +1,114 @@
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 1rem;
+}
+
+.card {
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 800px;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: bold;
+  margin: 0 0 1rem;
+  color: #c33;
+}
+
+.message {
+  margin: 0 0 1.5rem;
+  color: #666;
+  line-height: 1.6;
+}
+
+.errorDetails {
+  margin: 1.5rem 0;
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.errorDetails h2 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #333;
+  text-transform: uppercase;
+}
+
+.errorMessage,
+.componentStack {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 0.25rem;
+  padding: 0.75rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+  color: #c33;
+  overflow-x: auto;
+  margin: 0 0 1rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.componentStack {
+  color: #666;
+  font-size: 0.75rem;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.button {
+  flex: 1;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.875rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.button:hover {
+  background: #5568d3;
+}
+
+.button:active {
+  transform: scale(0.98);
+}
+
+.buttonSecondary {
+  flex: 1;
+  background: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+  padding: 0.875rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.buttonSecondary:hover {
+  background: #e0e0e0;
+}
+
+.buttonSecondary:active {
+  transform: scale(0.98);
+}

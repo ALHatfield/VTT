@@ -1,0 +1,263 @@
+.page {
+  padding: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.backButton {
+  background: none;
+  border: none;
+  color: var(--accent, #4a9eff);
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0;
+}
+
+.backButton:hover {
+  text-decoration: underline;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.editButton,
+.deleteButton,
+.saveButton,
+.cancelButton {
+  padding: 0.4rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.editButton {
+  background: var(--accent, #4a9eff);
+  color: #fff;
+}
+
+.deleteButton {
+  background: var(--error, #ff6b6b);
+  color: #fff;
+}
+
+.saveButton {
+  background: #51cf66;
+  color: #fff;
+}
+
+.cancelButton {
+  background: var(--surface, #3a3a3a);
+  color: var(--text-primary, #e0e0e0);
+}
+
+.identity {
+  margin-bottom: 1.5rem;
+}
+
+.charName {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-primary, #e0e0e0);
+  margin: 0 0 0.25rem;
+}
+
+.charMeta {
+  font-size: 1rem;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+/* Core stats bar */
+.coreStats {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.coreStat {
+  background: var(--surface, #2a2a2a);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  min-width: 80px;
+}
+
+.coreStatValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.coreStatLabel {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #a0a0a0);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border, #3a3a3a);
+  margin-bottom: 1.5rem;
+}
+
+.tab {
+  padding: 0.5rem 1rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary, #a0a0a0);
+  cursor: pointer;
+  font-size: 0.875rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.tab:hover {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.tabActive {
+  color: var(--accent, #4a9eff);
+  border-bottom-color: var(--accent, #4a9eff);
+}
+
+/* Ability scores grid */
+.abilityGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.abilityCard {
+  background: var(--surface, #2a2a2a);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 8px;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.abilityName {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #a0a0a0);
+  margin-bottom: 0.25rem;
+}
+
+.abilityModifier {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.abilityScore {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+/* Computed stats */
+.computedStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.computedStat {
+  background: var(--surface, #2a2a2a);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.computedStatLabel {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+.computedStatValue {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+/* Biography */
+.biographyContent {
+  background: var(--surface, #2a2a2a);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 8px;
+  padding: 1.25rem;
+  color: var(--text-primary, #e0e0e0);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  min-height: 100px;
+}
+
+/* Placeholder tabs */
+.placeholderContent {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+/* HP bar */
+.hpBar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hpInput {
+  width: 60px;
+  padding: 0.25rem 0.5rem;
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 4px;
+  color: var(--text-primary, #e0e0e0);
+  font-size: 1rem;
+  text-align: center;
+}
+
+.hpSeparator {
+  color: var(--text-secondary, #a0a0a0);
+}
+
+.statusText {
+  color: var(--text-secondary, #a0a0a0);
+  text-align: center;
+  padding: 2rem;
+}
+
+.errorText {
+  color: var(--error, #ff6b6b);
+  text-align: center;
+  padding: 2rem;
+}
+
+@media (max-width: 640px) {
+  .abilityGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .coreStats {
+    gap: 0.75rem;
+  }
+}

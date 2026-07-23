@@ -1,0 +1,14 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-bg-primary);
+}
+
+.title {
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: 3rem;
+  letter-spacing: 0.1em;
+}

@@ -1,0 +1,167 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.statusText {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+}
+
+.errorText {
+  color: var(--color-error);
+  font-size: var(--font-size-md);
+}
+
+.createButton {
+  background-color: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  padding: var(--spacing-sm) var(--spacing-md);
+  transition: background-color 0.2s;
+}
+
+.createButton:hover {
+  background-color: var(--color-accent-hover);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl) 0;
+}
+
+.emptyText {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.card {
+  background-color: var(--color-bg-surface);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.cardTitle {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.roleBadge {
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.roleDm {
+  background-color: rgba(233, 69, 96, 0.2);
+  color: var(--color-accent);
+  border: 1px solid rgba(233, 69, 96, 0.4);
+}
+
+.rolePlayer {
+  background-color: rgba(46, 213, 115, 0.15);
+  color: var(--color-success);
+  border: 1px solid rgba(46, 213, 115, 0.3);
+}
+
+.roleObserver {
+  background-color: rgba(168, 168, 184, 0.15);
+  color: var(--color-text-secondary);
+  border: 1px solid rgba(168, 168, 184, 0.2);
+}
+
+.cardDescription {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+  flex: 1;
+}
+
+.cardFooter {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+  margin-top: var(--spacing-sm);
+}
+
+.detailButton {
+  background-color: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  padding: var(--spacing-xs) var(--spacing-md);
+  transition: background-color 0.2s;
+}
+
+.detailButton:hover {
+  background-color: var(--color-accent-hover);
+}
+
+.detailButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.settingsButton {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.settingsButton:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--color-text-primary);
+}
