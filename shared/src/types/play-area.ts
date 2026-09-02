@@ -31,6 +31,18 @@ export type TokenType = 'player' | 'monster' | 'npc' | 'misc';
 /** NPC subtype — only set when `type === 'npc'`; null for all other types (Phase 4F.2) */
 export type NpcSubtype = 'ally' | 'enemy';
 
+export type AuraType = 'presence' | 'turn' | 'condition';
+
+export type AuraCondition = 'stunned' | 'poisoned' | 'blessed';
+
+export interface AuraConfig {
+  radius: number;
+  color: string;
+  visible: boolean;
+  type: AuraType;
+  condition: AuraCondition | null;
+}
+
 export interface Token {
   id: string;
   sceneId: string;
@@ -55,6 +67,11 @@ export interface Token {
   ac: number | null;
   /** Vision radius in grid cells (default 6 = 30ft darkvision). */
   visionRadius: number;
+  auraRadius: number | null;
+  auraColor: string | null;
+  auraVisible: boolean;
+  auraType: AuraType | null;
+  auraCondition: AuraCondition | null;
   /**
    * Only set when `type === 'npc'`. Null for all other token types.
    * Null NPC tokens default to enemy behaviour (Phase 4F.2).
@@ -77,6 +94,11 @@ export interface TokenCreatePayload {
   ac?: number;
   ownerId?: string;
   visionRadius?: number;
+  auraRadius?: number;
+  auraColor?: string;
+  auraVisible?: boolean;
+  auraType?: AuraType;
+  auraCondition?: AuraCondition | null;
   /** Only valid when `type === 'npc'`. Omit for non-NPC tokens. */
   npcSubtype?: NpcSubtype;
 }
@@ -91,6 +113,11 @@ export interface TokenUpdatePayload {
   maxHp?: number | null;
   ac?: number | null;
   visionRadius?: number;
+  auraRadius?: number | null;
+  auraColor?: string | null;
+  auraVisible?: boolean;
+  auraType?: AuraType | null;
+  auraCondition?: AuraCondition | null;
   /** Only valid when `type === 'npc'`. Use `null` to clear. */
   npcSubtype?: NpcSubtype | null;
 }
@@ -163,6 +190,17 @@ export interface TokenUpdatedPayload {
   campaignId: string;
 }
 
+export interface AuraUpdatePayload {
+  tokenId: string;
+  campaignId: string;
+  aura: Partial<AuraConfig>;
+}
+
+export interface AuraUpdatedPayload {
+  token: Token;
+  campaignId: string;
+}
+
 /** Broadcast after a new token is created on the scene. */
 export interface TokenCreatedPayload {
   token: Token;
@@ -201,6 +239,51 @@ export interface ChatReceivedPayload {
 export interface TokenDeletedPayload {
   tokenId: string;
   campaignId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Initiative types (Phase 4H)
+// ---------------------------------------------------------------------------
+
+export interface InitiativeTurnEntry {
+  tokenId: string;
+  tokenName: string;
+  characterId: string | null;
+  ownerId: string | null;
+  initiativeModifier: number;
+  initiativeRoll: number | null;
+  initiativeTotal: number | null;
+}
+
+export interface InitiativeState {
+  campaignId: string;
+  active: boolean;
+  activeTokenId: string | null;
+  round: number;
+  turnIndex: number;
+  order: InitiativeTurnEntry[];
+}
+
+export interface InitiativeStartPayload {
+  campaignId: string;
+  tokenIds?: string[];
+}
+
+export interface InitiativeAdvancePayload {
+  campaignId: string;
+}
+
+export interface InitiativeEndPayload {
+  campaignId: string;
+}
+
+export interface InitiativeReorderPayload {
+  campaignId: string;
+  tokenIds: string[];
+}
+
+export interface InitiativeUpdatedPayload {
+  state: InitiativeState;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,6 +387,24 @@ export interface FogHiddenPayload {
   sceneId: string;
 }
 
+/**
+ * Client intent to delete a single revealed fog region by id.
+ */
+export interface FogRegionDeletePayload {
+  campaignId: string;
+  sceneId: string;
+  regionId: string;
+}
+
+/**
+ * Server broadcast after a single fog region is deleted.
+ */
+export interface FogRegionDeletedPayload {
+  regionId: string;
+  campaignId: string;
+  sceneId: string;
+}
+
 // ---------------------------------------------------------------------------
 // Scene types (Phase 4B)
 // ---------------------------------------------------------------------------
@@ -317,4 +418,79 @@ export interface Scene {
   height: number;
   cellSize: number;
   isActive: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Measure tool types (Phase 4J)
+// ---------------------------------------------------------------------------
+
+/** Client → Server: broadcast a measurement line to the campaign room while dragging. */
+export interface MeasureBroadcastPayload {
+  campaignId: string;
+  /** World-pixel X of the measurement start point. */
+  startX: number;
+  /** World-pixel Y of the measurement start point. */
+  startY: number;
+  /** World-pixel X of the measurement end point. */
+  endX: number;
+  /** World-pixel Y of the measurement end point. */
+  endY: number;
+  /** Player's campaign color (hex string, e.g. "#e03131"). */
+  color: string;
+  /** When true, only the DM and the sender see this measurement. */
+  isPrivate: boolean;
+}
+
+/** Client → Server: clear the sender's active measurement line. */
+export interface MeasureClearPayload {
+  campaignId: string;
+  /** Must match the original broadcast — server uses this to route the clear to the same audience. */
+  isPrivate: boolean;
+}
+
+/** Server → Client: relay of a measure broadcast including the sender's userId. */
+export type MeasureRelayedPayload = MeasureBroadcastPayload & { userId: string };
+
+/** Server → Client: relay of a measure clear including the sender's userId. */
+export type MeasureClearedPayload = Pick<MeasureClearPayload, 'campaignId'> & { userId: string };
+
+// ---------------------------------------------------------------------------
+// Drawing tool types (Phase 4K)
+// ---------------------------------------------------------------------------
+
+export interface DrawPoint {
+  x: number;
+  y: number;
+}
+
+export type DrawShapeType = 'freehand' | 'rect' | 'circle';
+
+/** Client → Server: stroke chunk or final stroke payload. */
+export interface DrawStrokePayload {
+  campaignId: string;
+  /** Unique ID for this stroke session — stable across all chunks of the same stroke. */
+  strokeId: string;
+  points: DrawPoint[];
+  color: string;
+  width: number;
+  shapeType: DrawShapeType;
+  /** True on mouseup — marks the stroke as complete. */
+  isFinal: boolean;
+}
+
+/** Server → Client: relay of a draw stroke including the sender's userId. */
+export type DrawStrokeRelayedPayload = DrawStrokePayload & { userId: string };
+
+/** Client → Server: clear drawings. Scope is role-enforced server-side. */
+export interface DrawClearPayload {
+  campaignId: string;
+  /** 'all' — DM clears all drawings. 'own' — user clears only their own. */
+  scope: 'all' | 'own';
+}
+
+/** Server → Client: relay of a draw clear. */
+export interface DrawClearedPayload {
+  campaignId: string;
+  scope: 'all' | 'own';
+  userId: string;
 }

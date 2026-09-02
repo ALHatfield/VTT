@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { Token, TokenCreatePayload } from '@vtt/shared';
+import type { Token, TokenCreatePayload, TokenUpdatePayload } from '@vtt/shared';
 
 interface UseTokensReturn {
   tokens: Token[];
@@ -8,6 +8,7 @@ interface UseTokensReturn {
   error: string | null;
   createToken: (payload: TokenCreatePayload) => Promise<Token>;
   moveToken: (tokenId: string, x: number, y: number) => Promise<void>;
+  updateToken: (tokenId: string, payload: TokenUpdatePayload) => Promise<Token>;
   updateTokenHp: (tokenId: string, hp: number) => Promise<void>;
   applyRemoteTokenMove: (tokenId: string, x: number, y: number) => void;
   applyRemoteTokenUpdate: (token: Token) => void;
@@ -117,12 +118,13 @@ export function useTokens(
     setTick((n) => n + 1);
   }, []);
 
-  const updateTokenHp = useCallback(
-    async (tokenId: string, hp: number): Promise<void> => {
-      if (!campaignId || !sceneId) return;
+  const updateToken = useCallback(
+    async (tokenId: string, payload: TokenUpdatePayload): Promise<Token> => {
+      if (!campaignId || !sceneId) {
+        throw new Error('Cannot update token before campaign and scene are loaded');
+      }
 
-      // Optimistic update
-      setTokens((prev) => prev.map((t) => (t.id === tokenId ? { ...t, hp } : t)));
+      setTokens((prev) => prev.map((t) => (t.id === tokenId ? { ...t, ...payload } : t)));
 
       try {
         const res = await fetch(
@@ -131,27 +133,34 @@ export function useTokens(
             method: 'PUT',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ hp }),
+            body: JSON.stringify(payload),
           },
         );
 
         if (!res.ok) {
-          // Revert on failure by refreshing from server
           setTick((n) => n + 1);
           const body = await res.json().catch(() => ({}));
           throw new Error(
-            (body as { error?: { message?: string } }).error?.message ?? 'Failed to update HP',
+            (body as { error?: { message?: string } }).error?.message ?? 'Failed to update token',
           );
         }
 
         const data = (await res.json()) as { data: Token };
         setTokens((current) => current.map((t) => (t.id === tokenId ? data.data : t)));
+        return data.data;
       } catch (err) {
-        console.error('[useTokens] updateTokenHp failed:', err);
+        console.error('[useTokens] updateToken failed:', err);
         throw err;
       }
     },
     [campaignId, sceneId],
+  );
+
+  const updateTokenHp = useCallback(
+    async (tokenId: string, hp: number): Promise<void> => {
+      await updateToken(tokenId, { hp });
+    },
+    [updateToken],
   );
 
   const applyRemoteTokenMove = useCallback((tokenId: string, x: number, y: number): void => {
@@ -214,6 +223,7 @@ export function useTokens(
     error,
     createToken,
     moveToken,
+    updateToken,
     updateTokenHp,
     applyRemoteTokenMove,
     applyRemoteTokenUpdate,

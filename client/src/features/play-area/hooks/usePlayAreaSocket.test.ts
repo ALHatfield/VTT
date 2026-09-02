@@ -1,7 +1,12 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PLAY_AREA_EVENTS, SOCKET_TOKEN_MOVE_DEBOUNCE_MS } from '@vtt/shared';
+import {
+  AURA_EVENTS,
+  INITIATIVE_EVENTS,
+  PLAY_AREA_EVENTS,
+  SOCKET_TOKEN_MOVE_DEBOUNCE_MS,
+} from '@vtt/shared';
 
 // ---------------------------------------------------------------------------
 // Mock socket.io-client before importing the hook
@@ -41,7 +46,9 @@ const { io: mockedIo } = await import('socket.io-client');
 function triggerSocketEvent(event: string, payload?: unknown): void {
   const call = mockSocketOn.mock.calls.find(([e]) => e === event);
   if (!call) throw new Error(`No handler registered for event: ${event}`);
-  (call[1] as (p: unknown) => void)(payload);
+  act(() => {
+    (call[1] as (p: unknown) => void)(payload);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -142,9 +149,7 @@ describe('usePlayAreaSocket', () => {
     });
 
     it('cancels pending emit on unmount', () => {
-      const { result, unmount } = renderHook(() =>
-        usePlayAreaSocket({ campaignId: 'campaign-1' }),
-      );
+      const { result, unmount } = renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1' }));
       act(() => {
         result.current.emitTokenMove('token-1', 1, 2);
         unmount();
@@ -182,6 +187,14 @@ describe('usePlayAreaSocket', () => {
       expect(onUserLeft).toHaveBeenCalledWith(payload);
     });
 
+    it('routes aura:updated through onTokenUpdated', () => {
+      const onTokenUpdated = vi.fn();
+      renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1', onTokenUpdated }));
+      const payload = { token: { id: 'token-1' }, campaignId: 'campaign-1' };
+      triggerSocketEvent(AURA_EVENTS.AURA_UPDATED, payload);
+      expect(onTokenUpdated).toHaveBeenCalledWith(payload);
+    });
+
     it('uses the latest callback ref without recreating the socket', () => {
       const callback1 = vi.fn();
       const callback2 = vi.fn();
@@ -203,6 +216,77 @@ describe('usePlayAreaSocket', () => {
 
       expect(callback1).not.toHaveBeenCalled();
       expect(callback2).toHaveBeenCalledWith(payload);
+    });
+
+    it('calls onInitiativeUpdated when initiative state changes', () => {
+      const onInitiativeUpdated = vi.fn();
+      renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1', onInitiativeUpdated }));
+      const payload = {
+        state: {
+          campaignId: 'campaign-1',
+          active: true,
+          activeTokenId: 'token-1',
+          round: 1,
+          turnIndex: 0,
+          order: [],
+        },
+      };
+
+      triggerSocketEvent(INITIATIVE_EVENTS.INITIATIVE_UPDATED, payload);
+
+      expect(onInitiativeUpdated).toHaveBeenCalledWith(payload);
+    });
+  });
+
+  describe('initiative emits', () => {
+    it('emits initiative:start with optional token ids', () => {
+      const { result } = renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1' }));
+
+      act(() => {
+        result.current.emitInitiativeStart(['token-1', 'token-2']);
+      });
+
+      expect(mockSocketEmit).toHaveBeenCalledWith(INITIATIVE_EVENTS.INITIATIVE_START, {
+        campaignId: 'campaign-1',
+        tokenIds: ['token-1', 'token-2'],
+      });
+    });
+
+    it('emits initiative:advance for the current campaign', () => {
+      const { result } = renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1' }));
+
+      act(() => {
+        result.current.emitInitiativeAdvance();
+      });
+
+      expect(mockSocketEmit).toHaveBeenCalledWith(INITIATIVE_EVENTS.INITIATIVE_ADVANCE, {
+        campaignId: 'campaign-1',
+      });
+    });
+
+    it('emits initiative:end for the current campaign', () => {
+      const { result } = renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1' }));
+
+      act(() => {
+        result.current.emitInitiativeEnd();
+      });
+
+      expect(mockSocketEmit).toHaveBeenCalledWith(INITIATIVE_EVENTS.INITIATIVE_END, {
+        campaignId: 'campaign-1',
+      });
+    });
+
+    it('emits initiative:reorder with the requested order', () => {
+      const { result } = renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1' }));
+
+      act(() => {
+        result.current.emitInitiativeReorder(['token-2', 'token-1']);
+      });
+
+      expect(mockSocketEmit).toHaveBeenCalledWith(INITIATIVE_EVENTS.INITIATIVE_REORDER, {
+        campaignId: 'campaign-1',
+        tokenIds: ['token-2', 'token-1'],
+      });
     });
   });
 });

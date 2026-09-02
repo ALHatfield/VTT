@@ -81,6 +81,7 @@ model CampaignPlayer {
   campaignId String       @map("campaign_id")
   userId     String       @map("user_id")
   role       CampaignRole
+  color      String?
   joinedAt   DateTime     @default(now()) @map("joined_at")
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -151,6 +152,11 @@ model Token {
   maxHp        Int?      @map("max_hp")
   ac           Int?
   visionRadius Int       @default(6) @map("vision_radius")
+  auraRadius   Int?      @map("aura_radius")
+  auraColor    String?   @map("aura_color")
+  auraVisible  Boolean   @default(false) @map("aura_visible")
+  auraType     String?   @map("aura_type")
+  auraCondition String?  @map("aura_condition")
   /// Only set when type = 'npc'; null for all other token types (Phase 4F.2)
   npcSubtype   NpcSubtype? @map("npc_subtype")
   createdAt    DateTime  @default(now()) @map("created_at")

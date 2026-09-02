@@ -83,6 +83,10 @@ export class ForegroundLayer extends Container {
     this.obfuscateForPlayer = enabled;
   }
 
+  setViewMode(mode: 'dm' | 'player'): void {
+    this.setObfuscationEnabled(mode === 'player');
+  }
+
   setBrushPreview(vertices: FogVertex[] | null): void {
     this.brushPreview.clear();
     if (!vertices || vertices.length < 3) return;

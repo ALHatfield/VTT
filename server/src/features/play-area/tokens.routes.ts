@@ -1,5 +1,17 @@
-import type { TokenCreatedPayload, TokenDeletedPayload, TokenMovedPayload, TokenUpdatedPayload } from '@vtt/shared';
-import { PLAY_AREA_EVENTS, tokenCreatePayloadSchema, tokenMovePayloadSchema, tokenUpdatePayloadSchema } from '@vtt/shared';
+import type {
+  AuraUpdatedPayload,
+  TokenCreatedPayload,
+  TokenDeletedPayload,
+  TokenMovedPayload,
+  TokenUpdatedPayload,
+} from '@vtt/shared';
+import {
+  AURA_EVENTS,
+  PLAY_AREA_EVENTS,
+  tokenCreatePayloadSchema,
+  tokenMovePayloadSchema,
+  tokenUpdatePayloadSchema,
+} from '@vtt/shared';
 import { Router } from 'express';
 
 import { getIo } from '../../shared/socket/io-instance.js';
@@ -7,16 +19,22 @@ import { asyncHandler } from '../../shared/utils/async-handler.js';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { requireCampaignRole } from '../campaigns/campaigns.middleware.js';
 import {
-    createToken,
-    deleteToken,
-    getOrCreateActiveScene,
-    listTokens,
-    moveToken,
-    updateToken
+  createToken,
+  deleteToken,
+  getOrCreateActiveScene,
+  listTokens,
+  moveToken,
+  updateToken,
 } from './tokens.service.js';
 import { emitVisionSync } from './vision.service.js';
 
 const router = Router();
+
+function hasAuraUpdate(data: Record<string, unknown>): boolean {
+  return ['auraRadius', 'auraColor', 'auraVisible', 'auraType', 'auraCondition'].some(
+    (key) => data[key] !== undefined,
+  );
+}
 
 // All play-area token routes require authentication
 router.use(requireAuth);
@@ -122,24 +140,24 @@ router.put(
       res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
       return;
     }
-    const token = await updateToken(
-      tokenId,
-      sceneId,
-      campaignId,
-      result.data,
-      userId,
-      userRole,
-    );
+    const token = await updateToken(tokenId, sceneId, campaignId, result.data, userId, userRole);
 
-    getIo()?.to(`campaign:${campaignId}`).emit(PLAY_AREA_EVENTS.TOKEN_UPDATED, {
+    const ioForUpdate = getIo();
+    ioForUpdate?.to(`campaign:${campaignId}`).emit(PLAY_AREA_EVENTS.TOKEN_UPDATED, {
       token,
       campaignId,
     } satisfies TokenUpdatedPayload);
 
+    if (ioForUpdate && hasAuraUpdate(result.data)) {
+      ioForUpdate.to(`campaign:${campaignId}`).emit(AURA_EVENTS.AURA_UPDATED, {
+        token,
+        campaignId,
+      } satisfies AuraUpdatedPayload);
+    }
+
     // Emit role-gated vision sync when token properties (including visionRadius) change
-    const io = getIo();
-    if (io) {
-      emitVisionSync(io, campaignId, sceneId).catch((err: unknown) => {
+    if (ioForUpdate) {
+      emitVisionSync(ioForUpdate, campaignId, sceneId).catch((err: unknown) => {
         console.error('[tokens.routes] vision:sync error after token update', err);
       });
     }
@@ -232,4 +250,3 @@ router.delete(
 );
 
 export { router as playAreaRouter };
-

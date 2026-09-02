@@ -1,4 +1,4 @@
-/* LayersPanel — Phase 5A placeholder (full implementation in Phase 5C) */
+/* LayersPanel — Phase 5A / 5C */
 
 .panel {
   display: flex;
@@ -42,7 +42,9 @@
   font-family: inherit;
   cursor: pointer;
   text-align: center;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .tab:hover {
@@ -59,16 +61,121 @@
 .body {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 14px;
+  padding: 6px 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  align-content: start;
+  min-height: 0;
 }
 
 .placeholder {
   text-align: center;
-  padding: 24px 0;
+  padding: 24px 14px;
   color: var(--color-text-muted, #8b8b9e);
   font-size: 0.75rem;
+  margin: 0;
+}
+
+/* -----------------------------------------------------------------------
+   Tile list
+   ----------------------------------------------------------------------- */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: background 0.12s;
+  user-select: none;
+}
+
+.row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rowSelected {
+  background: rgba(74, 158, 255, 0.12);
+  border-color: rgba(74, 158, 255, 0.25);
+}
+
+.rowDragOver {
+  border-color: var(--color-accent, #4a9eff);
+  background: rgba(74, 158, 255, 0.08);
+}
+
+.dragHandle {
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.8rem;
+  cursor: grab;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.thumbnail {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.thumbnailPlaceholder {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+}
+
+.name {
+  flex: 1;
+  font-size: 0.72rem;
+  color: var(--color-text-primary, #e8e8e8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Icon buttons (visibility, lock, delete) */
+.iconBtn {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.12s;
+  border-radius: 3px;
+}
+
+.iconBtn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.iconBtnOff {
+  opacity: 0.35;
+}
+
+.iconBtnLocked {
+  opacity: 1;
+}
+
+.iconBtnDelete:hover {
+  color: #ff6b6b;
 }

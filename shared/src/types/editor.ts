@@ -72,3 +72,29 @@ export interface UpdateTilePlacementPayload {
   zIndex?: number;
   category?: AssetCategory;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5E — Grid Alignment
+// ---------------------------------------------------------------------------
+
+/** Configuration for the auto-detection algorithm. */
+export interface GridDetectionConfig {
+  /** Number of grid cells the traced rectangle spans horizontally. */
+  cellsAcross: number;
+  /** Number of grid cells the traced rectangle spans vertically. */
+  cellsDown: number;
+}
+
+/** Result of a grid alignment operation (manual trace or auto-detection). */
+export interface GridAlignmentResult {
+  /** New tile pixel width after alignment. */
+  width: number;
+  /** New tile pixel height after alignment. */
+  height: number;
+  /** Detected or traced grid spacing in original asset pixels. */
+  gridSpacingPx: number;
+  /** Autocorrelation confidence 0–1. Present only for auto-detected results. */
+  confidence?: number;
+  /** Whether this result came from auto-detection (true) or manual trace (false). */
+  autoDetected: boolean;
+}

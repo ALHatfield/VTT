@@ -18,3 +18,9 @@ export const ASSET_CATEGORIES = ['background', 'playground', 'foreground'] as co
 
 /** Auto-save debounce delay for tile placement changes (ms) */
 export const PLACEMENT_AUTOSAVE_DEBOUNCE_MS = 500;
+
+/** Minimum autocorrelation confidence score to accept an auto-detection result (0–1). */
+export const GRID_DETECTION_MIN_CONFIDENCE = 0.6;
+
+/** Max time (ms) allowed for auto-detection before reporting failure. */
+export const GRID_DETECTION_TIMEOUT_MS = 500;

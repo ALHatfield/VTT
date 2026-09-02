@@ -10,7 +10,10 @@ import { hashPassword } from '../../shared/utils/password.js';
  * Verifies that visionRadius is accepted and returned correctly on token create/update.
  */
 
-async function createUser(username: string, email: string): Promise<{ id: string; cookies: string[] }> {
+async function createUser(
+  username: string,
+  email: string,
+): Promise<{ id: string; cookies: string[] }> {
   const passwordHash = await hashPassword('password123');
   const user = await prisma.user.create({ data: { username, email, passwordHash } });
   const res = await request(app).post('/api/auth/login').send({ email, password: 'password123' });
@@ -96,5 +99,87 @@ describe('PlayArea Routes — visionRadius (Phase 4F.1)', () => {
 
     const updated = (updateRes.body as { data: { visionRadius: number } }).data;
     expect(updated.visionRadius).toBe(10);
+  });
+
+  it('creates and updates token aura fields via PUT', async () => {
+    const createRes = await request(app)
+      .post(`/api/campaigns/${campaignId}/scenes/${sceneId}/tokens`)
+      .set('Cookie', dmCookies)
+      .send({
+        name: 'Aura Paladin',
+        type: 'player',
+        x: 1,
+        y: 1,
+        auraRadius: 2,
+        auraColor: '#ffd43b',
+        auraVisible: true,
+        auraType: 'presence',
+      })
+      .expect(201);
+
+    const created = (
+      createRes.body as {
+        data: {
+          id: string;
+          auraRadius: number;
+          auraColor: string;
+          auraVisible: boolean;
+          auraType: string;
+        };
+      }
+    ).data;
+    expect(created.auraRadius).toBe(2);
+    expect(created.auraColor).toBe('#ffd43b');
+    expect(created.auraVisible).toBe(true);
+    expect(created.auraType).toBe('presence');
+
+    const updateRes = await request(app)
+      .put(`/api/campaigns/${campaignId}/scenes/${sceneId}/tokens/${created.id}`)
+      .set('Cookie', dmCookies)
+      .send({
+        auraRadius: 3,
+        auraColor: '#cc5de8',
+        auraType: 'condition',
+        auraCondition: 'poisoned',
+      })
+      .expect(200);
+
+    const updated = (
+      updateRes.body as {
+        data: { auraRadius: number; auraColor: string; auraType: string; auraCondition: string };
+      }
+    ).data;
+    expect(updated.auraRadius).toBe(3);
+    expect(updated.auraColor).toBe('#cc5de8');
+    expect(updated.auraType).toBe('condition');
+    expect(updated.auraCondition).toBe('poisoned');
+  });
+
+  it('rejects player aura updates on their own token', async () => {
+    const player = await createUser('Aura_Player', 'aura-player@test.local');
+
+    try {
+      await request(app)
+        .post(`/api/campaigns/${campaignId}/invite`)
+        .set('Cookie', dmCookies)
+        .send({ email: 'aura-player@test.local', role: 'player' })
+        .expect(201);
+
+      const createRes = await request(app)
+        .post(`/api/campaigns/${campaignId}/scenes/${sceneId}/tokens`)
+        .set('Cookie', dmCookies)
+        .send({ name: 'Player Aura Token', type: 'player', x: 0, y: 0, ownerId: player.id })
+        .expect(201);
+
+      const tokenId = (createRes.body as { data: { id: string } }).data.id;
+
+      await request(app)
+        .put(`/api/campaigns/${campaignId}/scenes/${sceneId}/tokens/${tokenId}`)
+        .set('Cookie', player.cookies)
+        .send({ auraRadius: 2, auraColor: '#ffd43b', auraVisible: true })
+        .expect(403);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: player.id } });
+    }
   });
 });

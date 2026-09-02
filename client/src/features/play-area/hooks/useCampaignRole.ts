@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react';
 
-import type { CampaignRole } from '@vtt/shared';
+import type { CampaignPlayer, CampaignRole } from '@vtt/shared';
+import { DEFAULT_TOKEN_COLOR } from '@vtt/shared';
 
 interface UseCampaignRoleReturn {
   role: CampaignRole | null;
+  /** The current user's campaign-scoped color (null until loaded). */
+  playerColor: string;
   isLoading: boolean;
 }
 
-export function useCampaignRole(campaignId: string | undefined): UseCampaignRoleReturn {
+export function useCampaignRole(
+  campaignId: string | undefined,
+  userId?: string,
+): UseCampaignRoleReturn {
   const [role, setRole] = useState<CampaignRole | null>(null);
+  const [playerColor, setPlayerColor] = useState<string>(DEFAULT_TOKEN_COLOR);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -23,8 +30,15 @@ export function useCampaignRole(campaignId: string | undefined): UseCampaignRole
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         if (cancelled) return;
-        const body = (await res.json()) as { data?: { role?: CampaignRole } };
-        if (!cancelled) setRole(body.data?.role ?? null);
+        const body = (await res.json()) as {
+          data?: { role?: CampaignRole; members?: CampaignPlayer[] };
+        };
+        if (cancelled) return;
+        setRole(body.data?.role ?? null);
+        if (userId && body.data?.members) {
+          const member = body.data.members.find((m) => m.userId === userId);
+          if (member?.color) setPlayerColor(member.color);
+        }
       })
       .catch((err: unknown) => {
         console.error('[useCampaignRole] Failed to fetch campaign role:', err);
@@ -36,7 +50,7 @@ export function useCampaignRole(campaignId: string | undefined): UseCampaignRole
     return (): void => {
       cancelled = true;
     };
-  }, [campaignId]);
+  }, [campaignId, userId]);
 
-  return { role, isLoading };
+  return { role, playerColor, isLoading };
 }

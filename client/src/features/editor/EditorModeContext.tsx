@@ -1,17 +1,22 @@
 // EditorModeContext — Phase 5A / 5B
 // Provides editor/play mode state and tile selection at the play-area root
 import type { ReactElement, ReactNode } from 'react';
-import { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
 import type { EditorMode } from '@vtt/shared';
+
+const EMPTY_SELECTION: ReadonlySet<string> = new Set<string>();
 
 interface EditorModeContextValue {
   mode: EditorMode;
   setMode: (mode: EditorMode) => void;
   toggleMode: () => void;
-  /** ID of the currently selected tile placement, or null if none. */
-  selectedTilePlacementId: string | null;
-  setSelectedTilePlacementId: (id: string | null) => void;
+  /**
+   * Set of currently selected tile placement IDs. Empty when nothing is
+   * selected. Selection is set-based to support Shift+click and marquee drag.
+   */
+  selectedTilePlacementIds: ReadonlySet<string>;
+  setSelectedTilePlacementIds: (ids: ReadonlySet<string>) => void;
 }
 
 const EditorModeContext = createContext<EditorModeContextValue | null>(null);
@@ -22,21 +27,31 @@ interface EditorModeProviderProps {
 
 export function EditorModeProvider({ children }: EditorModeProviderProps): ReactElement {
   const [mode, setMode] = useState<EditorMode>('play');
-  const [selectedTilePlacementId, setSelectedTilePlacementId] = useState<string | null>(null);
+  const [selectedTilePlacementIds, setSelectedTilePlacementIdsState] =
+    useState<ReadonlySet<string>>(EMPTY_SELECTION);
+
+  const setSelectedTilePlacementIds = useCallback((ids: ReadonlySet<string>): void => {
+    setSelectedTilePlacementIdsState(ids.size === 0 ? EMPTY_SELECTION : new Set(ids));
+  }, []);
 
   const toggleMode = useCallback((): void => {
     setMode((prev) => (prev === 'play' ? 'editor' : 'play'));
-    // Deselect any tile when switching modes
-    setSelectedTilePlacementId(null);
+    // Deselect any tiles when switching modes
+    setSelectedTilePlacementIdsState(EMPTY_SELECTION);
   }, []);
 
-  return (
-    <EditorModeContext.Provider
-      value={{ mode, setMode, toggleMode, selectedTilePlacementId, setSelectedTilePlacementId }}
-    >
-      {children}
-    </EditorModeContext.Provider>
+  const value = useMemo(
+    (): EditorModeContextValue => ({
+      mode,
+      setMode,
+      toggleMode,
+      selectedTilePlacementIds,
+      setSelectedTilePlacementIds,
+    }),
+    [mode, toggleMode, selectedTilePlacementIds, setSelectedTilePlacementIds],
   );
+
+  return <EditorModeContext.Provider value={value}>{children}</EditorModeContext.Provider>;
 }
 
 export function useEditorMode(): EditorModeContextValue {

@@ -8,6 +8,7 @@ interface UseFogRegionsReturn {
   error: string | null;
   applyRemoteReveal: (region: FogRegion) => void;
   applyRemoteHide: (removedRegionIds: string[]) => void;
+  applyRemoteDelete: (regionId: string) => void;
   refresh: () => void;
 }
 
@@ -69,6 +70,10 @@ export function useFogRegions(
     setRegions((prev) => prev.filter((region) => !ids.has(region.id)));
   }, []);
 
+  const applyRemoteDelete = useCallback((regionId: string): void => {
+    setRegions((prev) => prev.filter((r) => r.id !== regionId));
+  }, []);
+
   const refresh = useCallback((): void => {
     setTick((n) => n + 1);
   }, []);
@@ -79,6 +84,7 @@ export function useFogRegions(
     error,
     applyRemoteReveal,
     applyRemoteHide,
+    applyRemoteDelete,
     refresh,
   };
 }

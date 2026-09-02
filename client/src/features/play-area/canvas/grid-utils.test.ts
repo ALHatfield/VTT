@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { gridToPixel, pixelToGrid, snapToGrid, snappedPixelToGridCoords } from './grid-utils';
+import {
+  gridToPixel,
+  pixelToGrid,
+  snapToGrid,
+  snapToGridCenter,
+  snappedPixelToGridCoords,
+} from './grid-utils';
 
 describe('pixelToGrid', () => {
   it('converts pixel position to grid column/row', () => {
@@ -49,5 +55,27 @@ describe('snappedPixelToGridCoords', () => {
 
   it('never returns negative coordinates', () => {
     expect(snappedPixelToGridCoords(-64, -64, 64)).toEqual({ gridX: 0, gridY: 0 });
+  });
+});
+
+describe('snapToGridCenter', () => {
+  it('snaps to the center of the containing grid cell', () => {
+    // Top-left of cell 0,0 → center is 32,32
+    expect(snapToGridCenter(0, 0, 64)).toEqual({ x: 32, y: 32 });
+    // Exactly at cell center → same cell
+    expect(snapToGridCenter(32, 32, 64)).toEqual({ x: 32, y: 32 });
+    // Cell 1,0 (64–127) → center at 96
+    expect(snapToGridCenter(64, 0, 64)).toEqual({ x: 96, y: 32 });
+    // Cell 1,1 (64–127 on both axes) → center at 96,96
+    expect(snapToGridCenter(96, 80, 64)).toEqual({ x: 96, y: 96 });
+  });
+
+  it('works with non-power-of-two cell sizes', () => {
+    expect(snapToGridCenter(0, 0, 70)).toEqual({ x: 35, y: 35 });
+    expect(snapToGridCenter(70, 0, 70)).toEqual({ x: 105, y: 35 });
+  });
+
+  it('returns correct center for positions just before cell boundary', () => {
+    expect(snapToGridCenter(63, 63, 64)).toEqual({ x: 32, y: 32 });
   });
 });

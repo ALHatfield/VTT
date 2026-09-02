@@ -1,28 +1,58 @@
 import type {
-    ChatReceivedPayload,
-    FogHiddenPayload,
-    FogRevealedPayload,
-    PresencePayload,
-    TokenMovedPayload,
+  AuraUpdatedPayload,
+  ChatReceivedPayload,
+  DrawClearedPayload,
+  DrawStrokeRelayedPayload,
+  FogHiddenPayload,
+  FogRegionDeletedPayload,
+  FogRevealedPayload,
+  InitiativeUpdatedPayload,
+  MeasureBroadcastPayload,
+  MeasureClearPayload,
+  PresencePayload,
+  TokenMovedPayload,
+  TokenUpdatedPayload,
 } from '@vtt/shared';
 import {
-    CHAT_EVENTS,
-    DICE_EVENTS,
-    FOG_EVENTS,
-    PLAY_AREA_EVENTS,
-    VISION_SYNC_DEBOUNCE_MS,
-    chatSendPayloadSchema,
-    diceRollPayloadSchema,
-    fogHidePayloadSchema,
-    fogRevealPayloadSchema,
-    roomJoinPayloadSchema,
-    tokenMoveSocketPayloadSchema,
+  AURA_EVENTS,
+  CHAT_EVENTS,
+  DICE_EVENTS,
+  DRAW_EVENTS,
+  FOG_EVENTS,
+  INITIATIVE_EVENTS,
+  MEASURE_EVENTS,
+  PLAY_AREA_EVENTS,
+  VISION_SYNC_DEBOUNCE_MS,
+  auraUpdatePayloadSchema,
+  chatSendPayloadSchema,
+  diceRollPayloadSchema,
+  drawClearPayloadSchema,
+  drawStrokePayloadSchema,
+  fogHidePayloadSchema,
+  fogRegionDeletePayloadSchema,
+  fogRevealPayloadSchema,
+  initiativeAdvancePayloadSchema,
+  initiativeEndPayloadSchema,
+  initiativeReorderPayloadSchema,
+  initiativeStartPayloadSchema,
+  measureBroadcastPayloadSchema,
+  measureClearPayloadSchema,
+  roomJoinPayloadSchema,
+  tokenMoveSocketPayloadSchema,
 } from '@vtt/shared';
 import type { Server, Socket } from 'socket.io';
 
 import { prisma } from '../../shared/db/prisma.js';
 import { parseDiceFormula, rollDiceFormula } from './dice.service.js';
-import { hideFogByPolygon, revealFogRegion } from './fog.service.js';
+import { deleteFogRegion, hideFogByPolygon, revealFogRegion } from './fog.service.js';
+import {
+  advanceInitiativeForCampaign,
+  endInitiativeForCampaign,
+  getInitiativeState,
+  reorderInitiativeForCampaign,
+  startInitiativeForCampaign,
+} from './initiative.service.js';
+import { updateToken } from './tokens.service.js';
 import { emitVisionSync, emitVisionSyncToSocket } from './vision.service.js';
 
 /** Per-campaign debounce timers for vision sync broadcasts. */
@@ -78,7 +108,7 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
       // Validate campaign membership
       const membership = await prisma.campaignPlayer.findUnique({
         where: { campaignId_userId: { campaignId, userId } },
-        select: { role: true },
+        select: { role: true, color: true },
       });
 
       if (!membership) {
@@ -98,6 +128,7 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
       const room = `campaign:${campaignId}`;
       socket.data.campaignId = campaignId;
       socket.data.campaignRole = membership.role;
+      socket.data.playerColor = membership.color ?? '#4a9eff';
       await socket.join(room);
 
       // Broadcast presence to all in the room including the joining user
@@ -113,6 +144,13 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
         emitVisionSyncToSocket(socket, campaignId, activeScene.id).catch((err: unknown) => {
           console.error('[play-area socket] room:join vision:sync error', err);
         });
+      }
+
+      const initiativeState = getInitiativeState(campaignId);
+      if (initiativeState) {
+        socket.emit(INITIATIVE_EVENTS.INITIATIVE_UPDATED, {
+          state: initiativeState,
+        } satisfies InitiativeUpdatedPayload);
       }
     } catch (err) {
       console.error('[play-area socket] room:join error', err);
@@ -191,6 +229,263 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
       socket.emit(PLAY_AREA_EVENTS.ERROR, {
         code: 'INTERNAL_ERROR',
         message: 'Failed to broadcast token move',
+      });
+    }
+  });
+
+  socket.on(AURA_EVENTS.AURA_UPDATE, async (rawPayload: unknown) => {
+    try {
+      const parsed = auraUpdatePayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid aura update payload',
+        });
+        return;
+      }
+
+      const { tokenId, campaignId, aura } = parsed.data;
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'You have not joined this campaign room',
+        });
+        return;
+      }
+
+      const role = socket.data.campaignRole as string | undefined;
+      if (role !== 'dm') {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Only the DM can update token auras',
+        });
+        return;
+      }
+
+      const existingToken = await prisma.token.findFirst({
+        where: { id: tokenId, campaignId },
+        select: { sceneId: true },
+      });
+      if (!existingToken) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'NOT_FOUND',
+          message: 'Token not found',
+        });
+        return;
+      }
+
+      const token = await updateToken(
+        tokenId,
+        existingToken.sceneId,
+        campaignId,
+        {
+          ...(aura.radius !== undefined && { auraRadius: aura.radius }),
+          ...(aura.color !== undefined && { auraColor: aura.color }),
+          ...(aura.visible !== undefined && { auraVisible: aura.visible }),
+          ...(aura.type !== undefined && { auraType: aura.type }),
+          ...(aura.condition !== undefined && { auraCondition: aura.condition }),
+        },
+        userId,
+        role,
+      );
+
+      const room = `campaign:${campaignId}`;
+      io.to(room).emit(AURA_EVENTS.AURA_UPDATED, {
+        token,
+        campaignId,
+      } satisfies AuraUpdatedPayload);
+      io.to(room).emit(PLAY_AREA_EVENTS.TOKEN_UPDATED, {
+        token,
+        campaignId,
+      } satisfies TokenUpdatedPayload);
+    } catch (err) {
+      console.error('[play-area socket] aura:update error', err);
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to update token aura',
+      });
+    }
+  });
+
+  socket.on(INITIATIVE_EVENTS.INITIATIVE_START, async (rawPayload: unknown) => {
+    try {
+      const parsed = initiativeStartPayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid initiative start payload',
+        });
+        return;
+      }
+
+      const { campaignId, tokenIds } = parsed.data;
+
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'You have not joined this campaign room',
+        });
+        return;
+      }
+
+      const role = socket.data.campaignRole as string | undefined;
+      if (role !== 'dm') {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Only the DM can start initiative',
+        });
+        return;
+      }
+
+      const state = await startInitiativeForCampaign(campaignId, tokenIds);
+      const room = `campaign:${campaignId}`;
+      io.to(room).emit(INITIATIVE_EVENTS.INITIATIVE_UPDATED, {
+        state,
+      } satisfies InitiativeUpdatedPayload);
+    } catch (err) {
+      console.error('[play-area socket] initiative:start error', err);
+      if (err instanceof Error && err.message.startsWith('Initiative start token list')) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: err.message,
+        });
+        return;
+      }
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to start initiative',
+      });
+    }
+  });
+
+  socket.on(INITIATIVE_EVENTS.INITIATIVE_ADVANCE, (rawPayload: unknown) => {
+    try {
+      const parsed = initiativeAdvancePayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid initiative advance payload',
+        });
+        return;
+      }
+
+      const { campaignId } = parsed.data;
+
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'You have not joined this campaign room',
+        });
+        return;
+      }
+
+      const role = socket.data.campaignRole as string | undefined;
+      if (role !== 'dm') {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Only the DM can advance initiative',
+        });
+        return;
+      }
+
+      const state = advanceInitiativeForCampaign(campaignId);
+      const room = `campaign:${campaignId}`;
+      io.to(room).emit(INITIATIVE_EVENTS.INITIATIVE_UPDATED, {
+        state,
+      } satisfies InitiativeUpdatedPayload);
+    } catch (err) {
+      console.error('[play-area socket] initiative:advance error', err);
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to advance initiative',
+      });
+    }
+  });
+
+  socket.on(INITIATIVE_EVENTS.INITIATIVE_END, (rawPayload: unknown) => {
+    try {
+      const parsed = initiativeEndPayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid initiative end payload',
+        });
+        return;
+      }
+
+      const { campaignId } = parsed.data;
+
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'You have not joined this campaign room',
+        });
+        return;
+      }
+
+      const role = socket.data.campaignRole as string | undefined;
+      if (role !== 'dm') {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Only the DM can end initiative',
+        });
+        return;
+      }
+
+      const state = endInitiativeForCampaign(campaignId);
+      const room = `campaign:${campaignId}`;
+      io.to(room).emit(INITIATIVE_EVENTS.INITIATIVE_UPDATED, {
+        state,
+      } satisfies InitiativeUpdatedPayload);
+    } catch (err) {
+      console.error('[play-area socket] initiative:end error', err);
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to end initiative',
+      });
+    }
+  });
+
+  socket.on(INITIATIVE_EVENTS.INITIATIVE_REORDER, (rawPayload: unknown) => {
+    try {
+      const parsed = initiativeReorderPayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid initiative reorder payload',
+        });
+        return;
+      }
+
+      const { campaignId, tokenIds } = parsed.data;
+
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'You have not joined this campaign room',
+        });
+        return;
+      }
+
+      const role = socket.data.campaignRole as string | undefined;
+      if (role !== 'dm') {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Only the DM can reorder initiative',
+        });
+        return;
+      }
+
+      const state = reorderInitiativeForCampaign(campaignId, tokenIds);
+      const room = `campaign:${campaignId}`;
+      io.to(room).emit(INITIATIVE_EVENTS.INITIATIVE_UPDATED, {
+        state,
+      } satisfies InitiativeUpdatedPayload);
+    } catch (err) {
+      console.error('[play-area socket] initiative:reorder error', err);
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INVALID_PAYLOAD',
+        message: 'Failed to reorder initiative',
       });
     }
   });
@@ -425,6 +720,53 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
     }
   });
 
+  socket.on(FOG_EVENTS.FOG_REGION_DELETE, async (rawPayload: unknown) => {
+    try {
+      const parsed = fogRegionDeletePayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid fog region delete payload',
+        });
+        return;
+      }
+
+      const { campaignId, sceneId, regionId } = parsed.data;
+
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'You have not joined this campaign room',
+        });
+        return;
+      }
+
+      const role = socket.data.campaignRole as string | undefined;
+      if (role !== 'dm') {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Only the DM can delete fog regions',
+        });
+        return;
+      }
+
+      await deleteFogRegion(regionId, sceneId, campaignId);
+
+      const room = `campaign:${campaignId}`;
+      io.to(room).emit(FOG_EVENTS.FOG_REGION_DELETED, {
+        regionId,
+        campaignId,
+        sceneId,
+      } satisfies FogRegionDeletedPayload);
+    } catch (err) {
+      console.error('[play-area socket] fog:region:delete error', err);
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to delete fog region',
+      });
+    }
+  });
+
   socket.on('disconnect', () => {
     const campaignId = socket.data.campaignId as string | undefined;
     if (!campaignId) return;
@@ -433,5 +775,206 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
     const presencePayload: PresencePayload = { userId, username, campaignId };
     socket.to(room).emit(PLAY_AREA_EVENTS.USER_LEFT, presencePayload);
   });
-}
 
+  // ---------------------------------------------------------------------------
+  // Measure tool handlers (Phase 4J)
+  // ---------------------------------------------------------------------------
+
+  socket.on(MEASURE_EVENTS.MEASURE_BROADCAST, (rawPayload: unknown) => {
+    try {
+      const parsed = measureBroadcastPayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid measure broadcast payload',
+        });
+        return;
+      }
+
+      const { campaignId, isPrivate, color: _clientColor, ...rest } = parsed.data;
+
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Campaign ID mismatch',
+        });
+        return;
+      }
+
+      const room = `campaign:${campaignId}`;
+      // Use authoritative color from socket.data — ignore client-supplied color to prevent impersonation
+      const authorativeColor = (socket.data.playerColor as string | undefined) ?? '#4a9eff';
+      const relayPayload: MeasureBroadcastPayload & { userId: string } = {
+        campaignId,
+        isPrivate,
+        userId,
+        color: authorativeColor,
+        ...rest,
+      };
+
+      if (isPrivate) {
+        // Private: relay only to DM sockets in the room (excludes sender)
+        const sockets = io.sockets.adapter.rooms.get(room);
+        if (sockets) {
+          for (const socketId of sockets) {
+            const target = io.sockets.sockets.get(socketId);
+            if (!target || target.id === socket.id) continue;
+            if (target.data.campaignRole === 'dm') {
+              target.emit(MEASURE_EVENTS.MEASURE_RELAYED, relayPayload);
+            }
+          }
+        }
+      } else {
+        // Public: broadcast to everyone else in the room
+        socket.to(room).emit(MEASURE_EVENTS.MEASURE_RELAYED, relayPayload);
+      }
+    } catch (err) {
+      console.error('[play-area socket] measure:broadcast error', err);
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to relay measure broadcast',
+      });
+    }
+  });
+
+  socket.on(MEASURE_EVENTS.MEASURE_CLEAR, (rawPayload: unknown) => {
+    try {
+      const parsed = measureClearPayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid measure clear payload',
+        });
+        return;
+      }
+
+      const { campaignId, isPrivate } = parsed.data;
+
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Campaign ID mismatch',
+        });
+        return;
+      }
+
+      const clearPayload: MeasureClearPayload & { userId: string } = {
+        campaignId,
+        isPrivate,
+        userId,
+      };
+      const room = `campaign:${campaignId}`;
+
+      if (isPrivate) {
+        // Private: relay clear only to DM sockets (same audience as the broadcast)
+        const sockets = io.sockets.adapter.rooms.get(room);
+        if (sockets) {
+          for (const socketId of sockets) {
+            const target = io.sockets.sockets.get(socketId);
+            if (!target || target.id === socket.id) continue;
+            if (target.data.campaignRole === 'dm') {
+              target.emit(MEASURE_EVENTS.MEASURE_CLEARED, clearPayload);
+            }
+          }
+        }
+      } else {
+        socket.to(room).emit(MEASURE_EVENTS.MEASURE_CLEARED, clearPayload);
+      }
+    } catch (err) {
+      console.error('[play-area socket] measure:clear error', err);
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to relay measure clear',
+      });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Drawing tool handlers (Phase 4K)
+  // ---------------------------------------------------------------------------
+
+  socket.on(DRAW_EVENTS.DRAW_STROKE, (rawPayload: unknown) => {
+    try {
+      const parsed = drawStrokePayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid draw stroke payload',
+        });
+        return;
+      }
+
+      const { campaignId } = parsed.data;
+
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Campaign ID mismatch',
+        });
+        return;
+      }
+
+      const role = socket.data.campaignRole as string | undefined;
+      if (role === 'observer') {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Observers cannot draw',
+        });
+        return;
+      }
+
+      const relayPayload: DrawStrokeRelayedPayload = {
+        ...parsed.data,
+        userId,
+      };
+
+      const room = `campaign:${campaignId}`;
+      socket.to(room).emit(DRAW_EVENTS.DRAW_STROKED, relayPayload);
+    } catch (err) {
+      console.error('[play-area socket] draw:stroke error', err);
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to relay draw stroke',
+      });
+    }
+  });
+
+  socket.on(DRAW_EVENTS.DRAW_CLEAR, (rawPayload: unknown) => {
+    try {
+      const parsed = drawClearPayloadSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid draw clear payload',
+        });
+        return;
+      }
+
+      const { campaignId, scope: requestedScope } = parsed.data;
+
+      if (campaignId !== socket.data.campaignId) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'FORBIDDEN',
+          message: 'Campaign ID mismatch',
+        });
+        return;
+      }
+
+      const role = socket.data.campaignRole as string | undefined;
+      // Only DMs may clear all; non-DMs are forced to 'own'
+      const scope: 'all' | 'own' = role === 'dm' ? requestedScope : 'own';
+
+      const clearPayload: DrawClearedPayload = { campaignId, scope, userId };
+
+      const room = `campaign:${campaignId}`;
+      // Include sender so their own canvas is also cleared
+      io.to(room).emit(DRAW_EVENTS.DRAW_CLEARED, clearPayload);
+    } catch (err) {
+      console.error('[play-area socket] draw:clear error', err);
+      socket.emit(PLAY_AREA_EVENTS.ERROR, {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to relay draw clear',
+      });
+    }
+  });
+}

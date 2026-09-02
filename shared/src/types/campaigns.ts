@@ -30,6 +30,7 @@ export interface CampaignPlayer {
   userId: string;
   role: CampaignRole;
   username: string;
+  color: string | null;
   joinedAt: Date;
 }
 

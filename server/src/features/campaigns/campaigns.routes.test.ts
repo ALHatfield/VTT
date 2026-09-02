@@ -188,6 +188,16 @@ describe('Campaign Routes', () => {
       expect(res.body.data.members[0].role).toBe('dm');
     });
 
+    it('includes color on members (Phase 4J)', async () => {
+      const res = await request(app)
+        .get(`/api/campaigns/${campaignId}`)
+        .set('Cookie', dmCookies)
+        .expect(200);
+
+      // DM was assigned the first palette color on campaign creation
+      expect(res.body.data.members[0].color).toMatch(/^#[0-9a-fA-F]{6}$/);
+    });
+
     it('returns 403 when user is not a member', async () => {
       await request(app)
         .get(`/api/campaigns/${campaignId}`)
@@ -325,6 +335,17 @@ describe('Campaign Routes', () => {
         role: 'player',
         username: 'Camp_Player',
       });
+    });
+
+    it('assigns a palette color to the invited member (Phase 4J)', async () => {
+      const res = await request(app)
+        .post(`/api/campaigns/${campaignId}/invite`)
+        .set('Cookie', dmCookies)
+        .send({ email: playerEmail, role: 'player' })
+        .expect(201);
+
+      // color should be a 6-digit hex string from the palette
+      expect(res.body.data.color).toMatch(/^#[0-9a-fA-F]{6}$/);
     });
 
     it('DM can invite a user as observer', async () => {

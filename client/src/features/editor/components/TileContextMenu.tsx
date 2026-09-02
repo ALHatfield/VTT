@@ -14,6 +14,7 @@ interface TileContextMenuProps {
   onRotate: (degrees: 90 | 180 | 270) => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  onAlignToGrid: () => void;
   onClose: () => void;
 }
 
@@ -23,6 +24,7 @@ export function TileContextMenu({
   onRotate,
   onDelete,
   onDuplicate,
+  onAlignToGrid,
   onClose,
 }: TileContextMenuProps): ReactElement {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -93,6 +95,17 @@ export function TileContextMenu({
         }}
       >
         Duplicate
+      </button>
+      <button
+        type="button"
+        className={styles.item}
+        role="menuitem"
+        onClick={() => {
+          onAlignToGrid();
+          onClose();
+        }}
+      >
+        Align to Grid
       </button>
       <hr className={styles.divider} />
       <button

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT_DIR = process.cwd();
@@ -152,35 +152,51 @@ async function start(values, flags) {
 }
 
 function runVitestSlug(slug, compact) {
-  const globs = [`**/features/${slug}/**`, `shared/src/**/${slug}*`];
+  const testFiles = collectSlugTestFiles(slug);
+
+  if (testFiles.length === 0) {
+    console.error(`No test files found for slug '${slug}'.`);
+    process.exit(1);
+  }
 
   if (!compact) {
-    runNpm(['run', 'test', '--', 'run', ...globs]);
+    runNpm(['run', 'test', '--', 'run', ...testFiles]);
     return;
   }
 
-  const npmArgs = process.env.npm_execpath
-    ? [process.execPath, process.env.npm_execpath]
-    : [process.platform === 'win32' ? 'npm.cmd' : 'npm'];
-
-  const vitestResult = spawnSync(
-    npmArgs[0],
-    [...npmArgs.slice(1), 'run', 'test', '--', 'run', '--reporter=json', ...globs],
-    { cwd: ROOT_DIR, stdio: ['inherit', 'pipe', 'ignore'], shell: false },
-  );
-
-  const filterResult = spawnSync(
+  const compactResult = spawnSync(
     process.execPath,
-    [path.join(ROOT_DIR, 'scripts', 'filter-test-results.mjs')],
-    {
-      cwd: ROOT_DIR,
-      input: vitestResult.stdout ?? Buffer.from(''),
-      stdio: ['pipe', 'inherit', 'inherit'],
-      shell: false,
-    },
+    [path.join(ROOT_DIR, 'scripts', 'run-compact-tests.mjs'), ...testFiles],
+    { cwd: ROOT_DIR, stdio: 'inherit', shell: false },
   );
 
-  if (filterResult.status !== 0) process.exit(filterResult.status ?? 1);
+  if (compactResult.status !== 0) process.exit(compactResult.status ?? 1);
+}
+
+function collectTestsUnder(dir) {
+  const absoluteDir = path.join(ROOT_DIR, dir);
+  if (!existsSync(absoluteDir)) return [];
+
+  const files = [];
+  for (const entry of readdirSync(absoluteDir, { withFileTypes: true })) {
+    const relativePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectTestsUnder(relativePath));
+      continue;
+    }
+    if (entry.isFile() && /\.(test|spec)\.(ts|tsx)$/.test(entry.name)) {
+      files.push(relativePath.replaceAll('\\', '/'));
+    }
+  }
+  return files;
+}
+
+function collectSlugTestFiles(slug) {
+  return [
+    ...collectTestsUnder(`client/src/features/${slug}`),
+    ...collectTestsUnder(`server/src/features/${slug}`),
+    ...collectTestsUnder('shared/src').filter((file) => path.basename(file).startsWith(slug)),
+  ].sort();
 }
 
 function verify(values, flags) {

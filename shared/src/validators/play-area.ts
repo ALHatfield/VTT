@@ -1,9 +1,13 @@
 import { z } from 'zod';
 
 import {
+  AURA_RADIUS_MAX,
+  AURA_RADIUS_MIN,
   CHAT_MESSAGE_MAX_LENGTH,
   DEFAULT_VISION_RADIUS,
   DICE_FORMULA_MAX_LENGTH,
+  DRAW_WIDTH_MAX,
+  DRAW_WIDTH_MIN,
   TOKEN_NAME_MAX_LENGTH,
   TOKEN_SIZE_MAX,
   TOKEN_SIZE_MIN,
@@ -12,6 +16,11 @@ import {
 
 const tokenTypeSchema = z.enum(['player', 'monster', 'npc', 'misc']);
 const npcSubtypeSchema = z.enum(['ally', 'enemy']);
+const auraTypeSchema = z.enum(['presence', 'turn', 'condition']);
+const auraConditionSchema = z.enum(['stunned', 'poisoned', 'blessed']);
+const hexColorSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'Color must be a 6-digit hex color (e.g. #4a9eff)');
 
 export const tokenCreatePayloadSchema = z
   .object({
@@ -24,10 +33,7 @@ export const tokenCreatePayloadSchema = z
     x: z.number().int().min(0, 'x must be a non-negative integer'),
     y: z.number().int().min(0, 'y must be a non-negative integer'),
     size: z.number().int().min(TOKEN_SIZE_MIN).max(TOKEN_SIZE_MAX).optional(),
-    color: z
-      .string()
-      .regex(/^#[0-9a-fA-F]{6}$/, 'Color must be a 6-digit hex color (e.g. #4a9eff)')
-      .optional(),
+    color: hexColorSchema.optional(),
     iconUrl: z
       .string()
       .trim()
@@ -48,6 +54,11 @@ export const tokenCreatePayloadSchema = z
       .max(VISION_RADIUS_MAX)
       .default(DEFAULT_VISION_RADIUS)
       .optional(),
+    auraRadius: z.number().int().min(AURA_RADIUS_MIN).max(AURA_RADIUS_MAX).optional(),
+    auraColor: hexColorSchema.optional(),
+    auraVisible: z.boolean().optional(),
+    auraType: auraTypeSchema.optional(),
+    auraCondition: auraConditionSchema.nullable().optional(),
     npcSubtype: npcSubtypeSchema.optional(),
   })
   .refine((d) => d.npcSubtype === undefined || d.type === 'npc', {
@@ -62,10 +73,7 @@ export const tokenUpdatePayloadSchema = z
     name: z.string().trim().min(1).max(TOKEN_NAME_MAX_LENGTH).optional(),
     type: tokenTypeSchema.optional(),
     size: z.number().int().min(TOKEN_SIZE_MIN).max(TOKEN_SIZE_MAX).optional(),
-    color: z
-      .string()
-      .regex(/^#[0-9a-fA-F]{6}$/)
-      .optional(),
+    color: hexColorSchema.optional(),
     iconUrl: z
       .string()
       .trim()
@@ -80,6 +88,11 @@ export const tokenUpdatePayloadSchema = z
     maxHp: z.number().int().min(0).nullable().optional(),
     ac: z.number().int().min(0).nullable().optional(),
     visionRadius: z.number().int().min(0).max(VISION_RADIUS_MAX).optional(),
+    auraRadius: z.number().int().min(AURA_RADIUS_MIN).max(AURA_RADIUS_MAX).nullable().optional(),
+    auraColor: hexColorSchema.nullable().optional(),
+    auraVisible: z.boolean().optional(),
+    auraType: auraTypeSchema.nullable().optional(),
+    auraCondition: auraConditionSchema.nullable().optional(),
     npcSubtype: npcSubtypeSchema.nullable().optional(),
   })
   .refine((data) => Object.values(data).some((v) => v !== undefined), {
@@ -87,6 +100,24 @@ export const tokenUpdatePayloadSchema = z
   });
 
 export type TokenUpdateInput = z.infer<typeof tokenUpdatePayloadSchema>;
+
+export const auraUpdatePayloadSchema = z.object({
+  tokenId: z.string().min(1, 'tokenId is required'),
+  campaignId: z.string().min(1, 'campaignId is required'),
+  aura: z
+    .object({
+      radius: z.number().int().min(AURA_RADIUS_MIN).max(AURA_RADIUS_MAX).optional(),
+      color: hexColorSchema.optional(),
+      visible: z.boolean().optional(),
+      type: auraTypeSchema.optional(),
+      condition: auraConditionSchema.nullable().optional(),
+    })
+    .refine((data) => Object.values(data).some((v) => v !== undefined), {
+      message: 'At least one aura field must be provided',
+    }),
+});
+
+export type AuraUpdateInput = z.infer<typeof auraUpdatePayloadSchema>;
 
 export const tokenMovePayloadSchema = z.object({
   x: z.number().int().min(0, 'x must be a non-negative integer'),
@@ -107,6 +138,50 @@ export const tokenMoveSocketPayloadSchema = z.object({
   y: z.number().int().finite().min(0, 'y must be a non-negative integer'),
   campaignId: z.string().min(1, 'campaignId is required'),
 });
+
+export const initiativeStartPayloadSchema = z
+  .object({
+    campaignId: z.string().min(1, 'campaignId is required'),
+    tokenIds: z.array(z.string().min(1, 'tokenId is required')).min(1).optional(),
+  })
+  .refine(
+    (payload) => {
+      if (!payload.tokenIds) return true;
+      return new Set(payload.tokenIds).size === payload.tokenIds.length;
+    },
+    {
+      message: 'tokenIds must be unique',
+      path: ['tokenIds'],
+    },
+  );
+
+export type InitiativeStartInput = z.infer<typeof initiativeStartPayloadSchema>;
+
+export const initiativeAdvancePayloadSchema = z.object({
+  campaignId: z.string().min(1, 'campaignId is required'),
+});
+
+export type InitiativeAdvanceInput = z.infer<typeof initiativeAdvancePayloadSchema>;
+
+export const initiativeEndPayloadSchema = z.object({
+  campaignId: z.string().min(1, 'campaignId is required'),
+});
+
+export type InitiativeEndInput = z.infer<typeof initiativeEndPayloadSchema>;
+
+export const initiativeReorderPayloadSchema = z
+  .object({
+    campaignId: z.string().min(1, 'campaignId is required'),
+    tokenIds: z
+      .array(z.string().min(1, 'tokenId is required'))
+      .min(1, 'At least one token is required'),
+  })
+  .refine((payload) => new Set(payload.tokenIds).size === payload.tokenIds.length, {
+    message: 'tokenIds must be unique',
+    path: ['tokenIds'],
+  });
+
+export type InitiativeReorderInput = z.infer<typeof initiativeReorderPayloadSchema>;
 
 // Chat payload schema (Phase 4D)
 export const chatSendPayloadSchema = z.object({
@@ -164,3 +239,58 @@ export const fogHidePayloadSchema = z.object({
 });
 
 export type FogHideInput = z.infer<typeof fogHidePayloadSchema>;
+
+export const fogRegionDeletePayloadSchema = z.object({
+  campaignId: z.string().min(1, 'campaignId is required'),
+  sceneId: z.string().min(1, 'sceneId is required'),
+  regionId: z.string().min(1, 'regionId is required'),
+});
+
+export type FogRegionDeleteInput = z.infer<typeof fogRegionDeletePayloadSchema>;
+
+// Measure tool validators (Phase 4J)
+
+export const measureBroadcastPayloadSchema = z.object({
+  campaignId: z.string().uuid('campaignId must be a valid UUID'),
+  startX: z.number().finite(),
+  startY: z.number().finite(),
+  endX: z.number().finite(),
+  endY: z.number().finite(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'color must be a 6-digit hex color'),
+  isPrivate: z.boolean(),
+});
+
+export type MeasureBroadcastInput = z.infer<typeof measureBroadcastPayloadSchema>;
+
+export const measureClearPayloadSchema = z.object({
+  campaignId: z.string().uuid('campaignId must be a valid UUID'),
+  isPrivate: z.boolean(),
+});
+
+export type MeasureClearInput = z.infer<typeof measureClearPayloadSchema>;
+
+// Drawing tool validators (Phase 4K)
+
+const DRAW_COORD_MAX = 100_000;
+
+const drawPointSchema = z.object({
+  x: z.number().finite().min(-DRAW_COORD_MAX).max(DRAW_COORD_MAX),
+  y: z.number().finite().min(-DRAW_COORD_MAX).max(DRAW_COORD_MAX),
+});
+
+export const drawStrokePayloadSchema = z.object({
+  campaignId: z.string().uuid('campaignId must be a valid UUID'),
+  strokeId: z.string().min(1, 'strokeId is required').max(64),
+  points: z.array(drawPointSchema).min(1, 'At least one point required').max(2000),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'color must be a 6-digit hex color'),
+  width: z.number().int().min(DRAW_WIDTH_MIN).max(DRAW_WIDTH_MAX),
+  shapeType: z.enum(['freehand', 'rect', 'circle']),
+  isFinal: z.boolean(),
+});
+
+export type DrawStrokeInput = z.infer<typeof drawStrokePayloadSchema>;
+
+export const drawClearPayloadSchema = z.object({
+  campaignId: z.string().uuid('campaignId must be a valid UUID'),
+  scope: z.enum(['all', 'own']),
+});

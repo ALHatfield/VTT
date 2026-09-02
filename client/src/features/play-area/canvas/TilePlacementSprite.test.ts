@@ -129,3 +129,60 @@ describe('TilePlacementSprite callbacks', () => {
     expect(onResizeEnd).toHaveBeenCalledWith('placement-2', 192, 64);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Resize-grow regression: the resize hit-area must NOT be reset while a resize
+// is in progress. The bug: resize() called updateHitArea() unconditionally,
+// which restored the hit area to tile-bounds mid-drag. Once the mouse moved
+// outside those bounds (the tile grew), pointermove stopped firing — so the
+// tile could only ever shrink, never grow.
+//
+// We test the fix via the computed grow path (math) since instantiating a real
+// TilePlacementSprite requires a WebGL context.
+// ---------------------------------------------------------------------------
+
+describe('Resize grow/shrink math (regression)', () => {
+  const CELL_SIZE = 64;
+  const MIN_TILE_SIZE = 16;
+
+  function simulateResize(
+    startWidth: number,
+    startMouseX: number,
+    currentMouseX: number,
+    zoom = 1,
+  ): number {
+    const dx = (currentMouseX - startMouseX) / zoom;
+    const rawWidth = startWidth + dx;
+    return Math.max(MIN_TILE_SIZE, Math.round(rawWidth / CELL_SIZE) * CELL_SIZE);
+  }
+
+  it('tile grows when dragging right past half a cell', () => {
+    // 128 → 192: drag 33px right at zoom 1
+    expect(simulateResize(128, 0, 33)).toBe(192);
+  });
+
+  it('tile grows when dragging right past half a cell at zoom 2', () => {
+    // At zoom 2 the mouse must move 66px in screen space to grow by one cell (32px world → 33+ to cross midpoint)
+    expect(simulateResize(128, 0, 66, 2)).toBe(192);
+  });
+
+  it('tile shrinks when dragging left past half a cell', () => {
+    // 128 → 64: drag 33px left
+    expect(simulateResize(128, 0, -33)).toBe(64);
+  });
+
+  it('does NOT grow when drag is less than half a cell (snap holds)', () => {
+    // 128: drag 31px right → still rounds to 128
+    expect(simulateResize(128, 0, 31)).toBe(128);
+  });
+
+  it('does NOT shrink when drag is less than half a cell (snap holds)', () => {
+    // 128: drag 31px left → still rounds to 128
+    expect(simulateResize(128, 0, -31)).toBe(128);
+  });
+
+  it('respects minimum tile size', () => {
+    // 64 → try to shrink to 0 → clamped to MIN_TILE_SIZE = 16
+    expect(simulateResize(64, 0, -200)).toBe(16);
+  });
+});

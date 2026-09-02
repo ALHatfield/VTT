@@ -57,13 +57,32 @@ vi.mock('pixi.js', () => {
   }
 
   class MockGraphics extends MockContainer {
-    circle(): this { return this; }
-    fill(): this { return this; }
-    stroke(): this { return this; }
-    clear(): this { return this; }
-    moveTo(): this { return this; }
-    lineTo(): this { return this; }
-    rect(): this { return this; }
+    circleCalls = 0;
+    clearCalls = 0;
+
+    circle(): this {
+      this.circleCalls += 1;
+      return this;
+    }
+    fill(): this {
+      return this;
+    }
+    stroke(): this {
+      return this;
+    }
+    clear(): this {
+      this.clearCalls += 1;
+      return this;
+    }
+    moveTo(): this {
+      return this;
+    }
+    lineTo(): this {
+      return this;
+    }
+    rect(): this {
+      return this;
+    }
   }
 
   class MockText extends MockContainer {
@@ -134,6 +153,11 @@ function makeToken(overrides: Partial<Token> = {}): Token {
     maxHp: 10,
     ac: 12,
     visionRadius: 6,
+    auraRadius: null,
+    auraColor: null,
+    auraVisible: false,
+    auraType: null,
+    auraCondition: null,
     iconUrl: null,
     ownerId: null,
     ownerName: null,
@@ -177,6 +201,74 @@ describe('TokenSprite', () => {
     });
   });
 
+  describe('setActiveTurn()', () => {
+    it('toggles the active turn ring', () => {
+      const sprite = new TokenSprite(makeToken(), CELL_SIZE, true);
+      const ring = (sprite as unknown as { activeTurnRing: { visible: boolean } }).activeTurnRing;
+
+      expect(ring.visible).toBe(false);
+      sprite.setActiveTurn(true);
+      expect(ring.visible).toBe(true);
+      sprite.setActiveTurn(false);
+      expect(ring.visible).toBe(false);
+    });
+  });
+
+  describe('aura rendering', () => {
+    it('draws the aura layer when aura visibility and radius are set', () => {
+      const sprite = new TokenSprite(
+        makeToken({ auraRadius: 2, auraColor: '#ffd43b', auraVisible: true, auraType: 'presence' }),
+        CELL_SIZE,
+        true,
+      );
+      const auraLayer = (sprite as unknown as { auraLayer: { visible: boolean } }).auraLayer;
+
+      expect(auraLayer).toBeDefined();
+      expect(auraLayer.visible).toBe(true);
+    });
+
+    it('updates aura without rebuilding when aura fields change', () => {
+      const sprite = new TokenSprite(makeToken(), CELL_SIZE, true);
+      const updated = makeToken({
+        auraRadius: 3,
+        auraColor: '#e05050',
+        auraVisible: true,
+        auraType: 'condition',
+        auraCondition: 'stunned',
+      });
+      const auraLayer = (
+        sprite as unknown as {
+          auraLayer: { circleCalls: number; clearCalls: number };
+        }
+      ).auraLayer;
+
+      expect(sprite.needsRebuild(updated, true)).toBe(false);
+      const previousCircleCalls = auraLayer.circleCalls;
+      const previousClearCalls = auraLayer.clearCalls;
+      sprite.updateToken(updated);
+      expect(sprite.tokenData.auraRadius).toBe(3);
+      expect(sprite.tokenData.auraVisible).toBe(true);
+      expect(auraLayer.clearCalls).toBeGreaterThan(previousClearCalls);
+      expect(auraLayer.circleCalls).toBeGreaterThan(previousCircleCalls);
+    });
+
+    it('prefers semantic condition colors over custom aura colors', () => {
+      const sprite = new TokenSprite(
+        makeToken({
+          auraRadius: 2,
+          auraColor: '#4a9eff',
+          auraVisible: true,
+          auraType: 'condition',
+          auraCondition: 'poisoned',
+        }),
+        CELL_SIZE,
+        true,
+      );
+
+      expect((sprite as unknown as { getAuraColor(): number }).getAuraColor()).toBe(0xcc5de8);
+    });
+  });
+
   describe('ghost indicator during drag', () => {
     it('ghost indicator starts hidden', () => {
       const sprite = new TokenSprite(makeToken(), CELL_SIZE, true);
@@ -189,6 +281,7 @@ describe('TokenSprite', () => {
 
       // Simulate pointerdown at (100, 100)
       emitEvent(sprite, 'pointerdown', {
+        button: 0,
         stopPropagation: vi.fn(),
         global: { x: 100, y: 100 },
       });
@@ -212,6 +305,7 @@ describe('TokenSprite', () => {
       const sprite = new TokenSprite(makeToken(), CELL_SIZE, true);
 
       emitEvent(sprite, 'pointerdown', {
+        button: 0,
         stopPropagation: vi.fn(),
         global: { x: 100, y: 100 },
       });
@@ -236,6 +330,7 @@ describe('TokenSprite', () => {
       sprite.onTokenClick = onClick;
 
       emitEvent(sprite, 'pointerdown', {
+        button: 0,
         stopPropagation: vi.fn(),
         global: { x: 100, y: 100 },
       });
@@ -258,6 +353,7 @@ describe('TokenSprite', () => {
       sprite.onTokenClick = onClick;
 
       emitEvent(sprite, 'pointerdown', {
+        button: 0,
         stopPropagation: vi.fn(),
         global: { x: 100, y: 100 },
       });
@@ -293,6 +389,7 @@ describe('TokenSprite', () => {
   describe('PP drag behavior — token stays at origin', () => {
     function setupDrag(sprite: TokenSprite, startX = 100, startY = 100) {
       emitEvent(sprite, 'pointerdown', {
+        button: 0,
         stopPropagation: vi.fn(),
         global: { x: startX, y: startY },
       });

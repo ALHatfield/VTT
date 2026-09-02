@@ -1,5 +1,5 @@
 import type { FederatedPointerEvent } from 'pixi.js';
-import { Application, Assets, Container } from 'pixi.js';
+import { Application, Assets, Container, Graphics } from 'pixi.js';
 
 import type {
   AssetCategory,
@@ -21,11 +21,32 @@ import { ForegroundLayer } from './ForegroundLayer';
 import { PlaygroundLayer } from './PlaygroundLayer';
 import { TilePlacementSprite } from './TilePlacementSprite';
 import { snapToGrid } from './grid-utils';
+import { rectFromPoints, rectsIntersect } from './selection-utils';
 import { getViewportBounds } from './viewport-culling';
 
 export interface CanvasManagerOptions {
   background?: number;
 }
+
+// Marquee rectangle appearance
+const MARQUEE_FILL_COLOR = 0x4fc3f7;
+const MARQUEE_FILL_ALPHA = 0.15;
+const MARQUEE_BORDER_COLOR = 0x4fc3f7;
+const MARQUEE_BORDER_ALPHA = 0.9;
+const MARQUEE_BORDER_WIDTH = 1;
+
+/** Minimum drag distance (px, screen space) before a stage drag is treated as a marquee. */
+const MARQUEE_ACTIVATION_THRESHOLD = 4;
+
+export type ToolMode =
+  | 'select'
+  | 'pan'
+  | 'measure'
+  | 'fog-reveal'
+  | 'fog-hide'
+  | 'npc-place'
+  | 'draw-freehand'
+  | 'draw-shape';
 
 export class CanvasManager {
   private readonly app: Application;
@@ -37,8 +58,14 @@ export class CanvasManager {
   private currentMapData: MapData | null = null;
   private currentCellSize = 64;
 
-  // Currently selected tile placement — used to deselect the previous tile on new selection
-  private selectedTilePlacementId: string | null = null;
+  // Currently selected tile placements. Set-based to support Shift+click and marquee.
+  private readonly selectedTilePlacementIds = new Set<string>();
+
+  // Locked tile placements — interactions are disabled for these even in editor mode.
+  private readonly lockedTilePlacementIds = new Set<string>();
+
+  // Editor mode flag — gates marquee behaviour so it only runs in editor mode.
+  private editorModeEnabled = false;
 
   // Token drag state — used by PlayArea to suppress panning during token drag
   private _isDraggingToken = false;
@@ -68,22 +95,190 @@ export class CanvasManager {
     this.panActive = false;
   };
 
+  // Right-click pan — global behavior available in all tool modes
+  private rightPanActive = false;
+  private rightPanLastX = 0;
+  private rightPanLastY = 0;
+  private readonly handleRightPanPointerDown = (e: PointerEvent): void => {
+    if (e.button !== 2) return;
+    e.preventDefault();
+    this.rightPanActive = true;
+    this.rightPanLastX = e.clientX;
+    this.rightPanLastY = e.clientY;
+    this.app.canvas.setPointerCapture(e.pointerId);
+  };
+  private readonly handleRightPanPointerMove = (e: PointerEvent): void => {
+    if (!this.rightPanActive) return;
+    const dx = e.clientX - this.rightPanLastX;
+    const dy = e.clientY - this.rightPanLastY;
+    this.rightPanLastX = e.clientX;
+    this.rightPanLastY = e.clientY;
+    this.pan(dx, dy);
+  };
+  private readonly handleRightPanPointerUp = (e: PointerEvent): void => {
+    if (e.button !== 2) return;
+    this.rightPanActive = false;
+  };
+
+  // Current canvas tool mode — controls pointer behavior in play mode
+  private currentToolMode: ToolMode = 'select';
+
+  // Native left-click background detection — belt-and-suspenders alongside the PixiJS stage
+  // handler. Uses rootBoundary.hitTest so it works even when PixiJS doesn't dispatch stage
+  // events for empty-canvas clicks (e.g. when no interactive child bounds cover the point).
+  private nativeLeftDownX = 0;
+  private nativeLeftDownY = 0;
+  private readonly handleNativePointerDown = (e: PointerEvent): void => {
+    if (e.button !== 0) return;
+    this.nativeLeftDownX = e.clientX;
+    this.nativeLeftDownY = e.clientY;
+  };
+  private readonly handleNativePointerUp = (e: PointerEvent): void => {
+    if (e.button !== 0) return;
+    if (!this.editorModeEnabled) return;
+    if (this.selectedTilePlacementIds.size === 0) return;
+    if (e.shiftKey) return;
+
+    const dx = e.clientX - this.nativeLeftDownX;
+    const dy = e.clientY - this.nativeLeftDownY;
+    if (Math.hypot(dx, dy) >= CanvasManager.CLICK_THRESHOLD) return;
+
+    // Ask PixiJS which object is under the cursor. If it isn't a tile sprite, the
+    // click landed on empty canvas (or a token/non-tile object) → deselect tiles.
+    const rect = this.app.canvas.getBoundingClientRect();
+    const hit = this.app.renderer.events.rootBoundary.hitTest(
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+    );
+    if (!(hit instanceof TilePlacementSprite)) {
+      this.clearTileSelection();
+    }
+  };
+
+  // Arrow-key nudge — active only in editor mode when tiles are selected.
+  // Plain arrow = 1px fine-tune; Shift+arrow = one full grid cell.
+  private readonly handleArrowKey = (e: KeyboardEvent): void => {
+    if (!this.editorModeEnabled) return;
+    if (this.selectedTilePlacementIds.size === 0) return;
+
+    let dx = 0;
+    let dy = 0;
+    const step = e.shiftKey ? this.currentCellSize : 1;
+    switch (e.key) {
+      case 'ArrowLeft':
+        dx = -step;
+        break;
+      case 'ArrowRight':
+        dx = step;
+        break;
+      case 'ArrowUp':
+        dy = -step;
+        break;
+      case 'ArrowDown':
+        dy = step;
+        break;
+      default:
+        return;
+    }
+
+    e.preventDefault(); // prevent the browser from scrolling the page
+
+    for (const id of this.selectedTilePlacementIds) {
+      const sprite =
+        this.backgroundLayer.getTilePlacementSprite(id) ??
+        this.playgroundLayer.getTilePlacementSprite(id) ??
+        this.foregroundLayer.getTilePlacementSprite(id);
+      if (!sprite) continue;
+      sprite.x += dx;
+      sprite.y += dy;
+      this.onTileMoveEnd?.(id, sprite.x, sprite.y);
+    }
+  };
+
   // Background click: fire only when pointer didn't travel more than CLICK_THRESHOLD pixels
   private static readonly CLICK_THRESHOLD = 4;
   private backgroundDownX = 0;
   private backgroundDownY = 0;
+  private backgroundDownShift = false;
+  private backgroundPointerActive = false;
+
+  // Marquee state — rubber-band selection rectangle drawn on the world container.
+  private marqueeGraphic: Graphics | null = null;
+  private marqueeActive = false;
+  private marqueeStartWorldX = 0;
+  private marqueeStartWorldY = 0;
+  private marqueeEndWorldX = 0;
+  private marqueeEndWorldY = 0;
+
   private readonly handleStagePointerDown = (e: FederatedPointerEvent): void => {
-    // Only record position when clicking the stage itself — not a child sprite
-    if (e.target !== this.app.stage) return;
+    // Tile and token sprites call e.stopPropagation() in their own pointerdown
+    // handlers, so this handler only fires for genuine empty-canvas clicks.
     this.backgroundDownX = e.global.x;
     this.backgroundDownY = e.global.y;
+    this.backgroundDownShift = e.shiftKey;
+    this.backgroundPointerActive = true;
+
+    // Start a potential marquee in editor mode OR play-mode select tool.
+    const canMarquee = this.editorModeEnabled || this.currentToolMode === 'select';
+    if (canMarquee) {
+      const start = this.screenToWorld(e.global.x, e.global.y);
+      this.marqueeStartWorldX = start.x;
+      this.marqueeStartWorldY = start.y;
+      this.marqueeEndWorldX = start.x;
+      this.marqueeEndWorldY = start.y;
+    }
   };
-  private readonly handleStagePointerUp = (e: FederatedPointerEvent): void => {
-    // Only fire background click when no interactive child was under the cursor
-    if (e.target !== this.app.stage) return;
+
+  private readonly handleStagePointerMove = (e: FederatedPointerEvent): void => {
+    if (!this.backgroundPointerActive) return;
+    const canMarquee = this.editorModeEnabled || this.currentToolMode === 'select';
+    if (!canMarquee) return;
     const dx = e.global.x - this.backgroundDownX;
     const dy = e.global.y - this.backgroundDownY;
-    if (Math.hypot(dx, dy) < CanvasManager.CLICK_THRESHOLD) this.onBackgroundClick?.();
+    if (!this.marqueeActive && Math.hypot(dx, dy) < MARQUEE_ACTIVATION_THRESHOLD) return;
+
+    if (!this.marqueeActive) {
+      this.marqueeActive = true;
+      this.ensureMarqueeGraphic();
+    }
+
+    const world = this.screenToWorld(e.global.x, e.global.y);
+    this.marqueeEndWorldX = world.x;
+    this.marqueeEndWorldY = world.y;
+    this.redrawMarquee();
+  };
+
+  private readonly handleStagePointerUp = (e: FederatedPointerEvent): void => {
+    // Only fire when the pointerdown originated on the stage itself
+    if (!this.backgroundPointerActive) return;
+    this.backgroundPointerActive = false;
+
+    if (this.marqueeActive) {
+      // Marquee drag completed — apply selection to intersecting sprites.
+      if (this.editorModeEnabled) {
+        this.commitMarqueeSelection(this.backgroundDownShift);
+      } else {
+        this.commitTokenMarqueeSelection();
+      }
+      this.clearMarqueeGraphic();
+      this.marqueeActive = false;
+      return;
+    }
+
+    const dx = e.global.x - this.backgroundDownX;
+    const dy = e.global.y - this.backgroundDownY;
+    if (Math.hypot(dx, dy) < CanvasManager.CLICK_THRESHOLD) {
+      // Background click. In editor mode, clear tile selection (unless Shift held
+      // — preserves selection while the user adds via subsequent Shift+click).
+      if (
+        this.editorModeEnabled &&
+        !this.backgroundDownShift &&
+        this.selectedTilePlacementIds.size > 0
+      ) {
+        this.clearTileSelection();
+      }
+      this.onBackgroundClick?.();
+    }
   };
 
   // Callbacks registered by PlayArea
@@ -97,6 +292,8 @@ export class CanvasManager {
   onTokenClick?: (tokenId: string) => void;
   onBackgroundClick?: () => void;
   onTokenDragStart?: () => void;
+  /** Fired when rubber-band selection in play-mode select tool completes. */
+  onTokensSelected?: (tokenIds: string[]) => void;
 
   // Editor-mode callbacks
   onTilePlaced?: (
@@ -108,7 +305,12 @@ export class CanvasManager {
     category: AssetCategory,
   ) => void;
   onTileMoveEnd?: (placementId: string, x: number, y: number) => void;
-  onTileSelect?: (placementId: string | null) => void;
+  /**
+   * Fired whenever the tile selection changes (single click, Shift+click,
+   * marquee, background click that clears selection, or external calls to
+   * `setTileSelection` / `clearTileSelection`).
+   */
+  onSelectionChange?: (ids: ReadonlySet<string>) => void;
   onTileResizeEnd?: (placementId: string, width: number, height: number) => void;
   onTileRotate?: (placementId: string, rotation: number) => void;
   onTileDelete?: (placementId: string) => void;
@@ -157,13 +359,22 @@ export class CanvasManager {
     // Uses pointerup + distance guard so pan gestures don't clear selection.
     this.app.stage.eventMode = 'static';
     this.app.stage.on('pointerdown', this.handleStagePointerDown);
+    this.app.stage.on('globalpointermove', this.handleStagePointerMove);
     this.app.stage.on('pointerup', this.handleStagePointerUp);
+    this.app.stage.on('pointerupoutside', this.handleStagePointerUp);
 
     // Middle-mouse canvas pan — native DOM listeners so they don't interfere with
     // PixiJS's federated event system used for token/tile selection.
     this.app.canvas.addEventListener('pointerdown', this.handlePanPointerDown);
     this.app.canvas.addEventListener('pointermove', this.handlePanPointerMove);
     this.app.canvas.addEventListener('pointerup', this.handlePanPointerUp);
+    // Right-click pan — global across all tool modes
+    this.app.canvas.addEventListener('pointerdown', this.handleRightPanPointerDown);
+    this.app.canvas.addEventListener('pointermove', this.handleRightPanPointerMove);
+    this.app.canvas.addEventListener('pointerup', this.handleRightPanPointerUp);
+    // Native left-click handler for reliable empty-canvas deselection.
+    this.app.canvas.addEventListener('pointerdown', this.handleNativePointerDown);
+    this.app.canvas.addEventListener('pointerup', this.handleNativePointerUp);
   }
 
   async loadMap(mapData: MapData): Promise<void> {
@@ -252,6 +463,21 @@ export class CanvasManager {
     if (tokenId) this.playgroundLayer.setTokenSelected(tokenId, true);
   }
 
+  /** Show the active-turn highlight on the current initiative token. */
+  setActiveTokenId(tokenId: string | null): void {
+    this.playgroundLayer.setActiveTokenId(tokenId);
+  }
+
+  /** Set visual selection state for a set of token IDs (clears previous selection first). */
+  setTokensSelected(tokenIds: ReadonlySet<string>, previousIds: ReadonlySet<string>): void {
+    for (const id of previousIds) {
+      if (!tokenIds.has(id)) this.playgroundLayer.setTokenSelected(id, false);
+    }
+    for (const id of tokenIds) {
+      this.playgroundLayer.setTokenSelected(id, true);
+    }
+  }
+
   /** Sync an updated token's position without re-rendering. */
   syncTokenPosition(token: Token): void {
     this.playgroundLayer.syncTokenPosition(token);
@@ -269,7 +495,7 @@ export class CanvasManager {
   }
 
   setFogRegions(regions: FogRegion[], obfuscateForPlayer: boolean): void {
-    this.foregroundLayer.setObfuscationEnabled(obfuscateForPlayer);
+    this.foregroundLayer.setViewMode(obfuscateForPlayer ? 'player' : 'dm');
     this.foregroundLayer.setFogRegions(regions);
   }
 
@@ -314,11 +540,37 @@ export class CanvasManager {
   }
 
   /**
+   * Set the active canvas tool mode. Controls pointer behavior in play mode.
+   */
+  setToolMode(mode: ToolMode): void {
+    this.currentToolMode = mode;
+    // Cancel any in-progress marquee when switching modes
+    if (this.marqueeActive) {
+      this.clearMarqueeGraphic();
+      this.marqueeActive = false;
+    }
+    this.backgroundPointerActive = false;
+  }
+
+  /**
    * Enable or disable editor interaction mode.
    * In editor mode, tile placements are interactive and tokens are not.
+   * When leaving editor mode, any active selection or marquee is cleared.
    */
   setEditorMode(enabled: boolean): void {
+    this.editorModeEnabled = enabled;
     this.setAllTilePlacementsInteractive(enabled);
+    if (enabled) {
+      window.addEventListener('keydown', this.handleArrowKey);
+    } else {
+      window.removeEventListener('keydown', this.handleArrowKey);
+      if (this.marqueeActive) {
+        this.clearMarqueeGraphic();
+        this.marqueeActive = false;
+      }
+      this.backgroundPointerActive = false;
+      if (this.selectedTilePlacementIds.size > 0) this.clearTileSelection();
+    }
   }
 
   private setAllTilePlacementsInteractive(interactive: boolean): void {
@@ -373,20 +625,17 @@ export class CanvasManager {
       sprite.zIndex = placement.zIndex;
       sprite.rotation = (placement.rotation * Math.PI) / 180;
       sprite.onMoveEnd = (id, x, y) => this.onTileMoveEnd?.(id, x, y);
-      sprite.onSelect = (id) => {
-        // Deselect the previously selected tile sprite
-        if (this.selectedTilePlacementId && this.selectedTilePlacementId !== id) {
-          const prev = this.findTilePlacementSprite(this.selectedTilePlacementId);
-          prev?.setSelected(false);
-        }
-        this.selectedTilePlacementId = id;
-        this.onTileSelect?.(id);
-      };
+      sprite.onSelect = (id, additive) => this.handleSpriteSelect(id, additive);
       sprite.onResizeEnd = (id, w, h) => this.onTileResizeEnd?.(id, w, h);
       sprite.onRotate = (id, r) => this.onTileRotate?.(id, r);
       sprite.onDelete = (id) => this.onTileDelete?.(id);
       sprite.onContextMenu = (id, sx, sy) => this.onTileContextMenu?.(id, sx, sy);
       sprite.setInteractive(editorMode);
+      sprite.setLocked(this.lockedTilePlacementIds.has(placement.id));
+      // Reapply selection visual for sprites that get recreated after a re-sync.
+      if (this.selectedTilePlacementIds.has(placement.id)) {
+        sprite.setSelected(true);
+      }
 
       layer.addTilePlacement(sprite);
     }
@@ -413,6 +662,180 @@ export class CanvasManager {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Tile selection (multi-select via Shift+click and marquee drag)
+  // ---------------------------------------------------------------------------
+
+  /** Snapshot of the current tile-placement selection. */
+  getSelectedTilePlacementIds(): ReadonlySet<string> {
+    return new Set(this.selectedTilePlacementIds);
+  }
+
+  /**
+   * Replace the current selection with the provided ids. Sprite visuals are
+   * synced to match. Fires `onSelectionChange` when the selection actually
+   * differs from the previous state.
+   */
+  setTileSelection(ids: ReadonlySet<string>): void {
+    const next = new Set(ids);
+    // No-op when selection is unchanged
+    if (next.size === this.selectedTilePlacementIds.size) {
+      let same = true;
+      for (const id of next) {
+        if (!this.selectedTilePlacementIds.has(id)) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
+    // Deselect sprites that are leaving the selection
+    for (const id of this.selectedTilePlacementIds) {
+      if (!next.has(id)) this.findTilePlacementSprite(id)?.setSelected(false);
+    }
+    // Select sprites that are joining the selection
+    for (const id of next) {
+      if (!this.selectedTilePlacementIds.has(id)) {
+        this.findTilePlacementSprite(id)?.setSelected(true);
+      }
+    }
+    this.selectedTilePlacementIds.clear();
+    for (const id of next) this.selectedTilePlacementIds.add(id);
+    this.emitSelectionChange();
+  }
+
+  /** Clear the current tile selection and notify subscribers. */
+  clearTileSelection(): void {
+    if (this.selectedTilePlacementIds.size === 0) return;
+    for (const id of this.selectedTilePlacementIds) {
+      this.findTilePlacementSprite(id)?.setSelected(false);
+    }
+    this.selectedTilePlacementIds.clear();
+    this.emitSelectionChange();
+  }
+
+  /**
+   * Sprite click handler. Additive (Shift held) toggles the sprite in-place;
+   * non-additive replaces the selection with just that sprite (or clears when
+   * the sprite was already the sole selection — matching the previous toggle
+   * behaviour for single-select users).
+   */
+  private handleSpriteSelect(id: string, additive: boolean): void {
+    if (additive) {
+      if (this.selectedTilePlacementIds.has(id)) {
+        this.selectedTilePlacementIds.delete(id);
+        this.findTilePlacementSprite(id)?.setSelected(false);
+      } else {
+        this.selectedTilePlacementIds.add(id);
+        this.findTilePlacementSprite(id)?.setSelected(true);
+      }
+      this.emitSelectionChange();
+      return;
+    }
+
+    const wasSoleSelected =
+      this.selectedTilePlacementIds.size === 1 && this.selectedTilePlacementIds.has(id);
+    // Deselect the current selection visually
+    for (const prev of this.selectedTilePlacementIds) {
+      this.findTilePlacementSprite(prev)?.setSelected(false);
+    }
+    this.selectedTilePlacementIds.clear();
+    if (!wasSoleSelected) {
+      this.selectedTilePlacementIds.add(id);
+      this.findTilePlacementSprite(id)?.setSelected(true);
+    }
+    this.emitSelectionChange();
+  }
+
+  private emitSelectionChange(): void {
+    this.onSelectionChange?.(new Set(this.selectedTilePlacementIds));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Marquee (rubber-band) selection
+  // ---------------------------------------------------------------------------
+
+  private ensureMarqueeGraphic(): void {
+    if (this.marqueeGraphic) return;
+    const g = new Graphics();
+    g.eventMode = 'none';
+    g.zIndex = 1_000_000;
+    this.marqueeGraphic = g;
+    this.worldContainer.addChild(g);
+  }
+
+  private redrawMarquee(): void {
+    if (!this.marqueeGraphic) return;
+    const rect = rectFromPoints(
+      this.marqueeStartWorldX,
+      this.marqueeStartWorldY,
+      this.marqueeEndWorldX,
+      this.marqueeEndWorldY,
+    );
+    this.marqueeGraphic.clear();
+    this.marqueeGraphic.rect(rect.x, rect.y, rect.width, rect.height);
+    this.marqueeGraphic.fill({ color: MARQUEE_FILL_COLOR, alpha: MARQUEE_FILL_ALPHA });
+    this.marqueeGraphic.stroke({
+      color: MARQUEE_BORDER_COLOR,
+      alpha: MARQUEE_BORDER_ALPHA,
+      width: MARQUEE_BORDER_WIDTH,
+    });
+  }
+
+  private clearMarqueeGraphic(): void {
+    if (!this.marqueeGraphic) return;
+    this.worldContainer.removeChild(this.marqueeGraphic);
+    this.marqueeGraphic.destroy();
+    this.marqueeGraphic = null;
+  }
+
+  /**
+   * Compute the set of tile sprites whose axis-aligned bounds intersect the
+   * marquee rectangle and apply them as the new selection. When `additive` is
+   * true, marquee hits are unioned with the current selection.
+   */
+  private commitMarqueeSelection(additive: boolean): void {
+    const marquee = rectFromPoints(
+      this.marqueeStartWorldX,
+      this.marqueeStartWorldY,
+      this.marqueeEndWorldX,
+      this.marqueeEndWorldY,
+    );
+
+    const hits = new Set<string>();
+    const collect = (sprite: TilePlacementSprite): void => {
+      if (rectsIntersect(marquee, sprite.getWorldBounds())) hits.add(sprite.placementId);
+    };
+    this.backgroundLayer.iterateTilePlacements(collect);
+    this.playgroundLayer.iterateTilePlacements(collect);
+    this.foregroundLayer.iterateTilePlacements(collect);
+
+    const next = additive ? new Set(this.selectedTilePlacementIds) : new Set<string>();
+    for (const id of hits) next.add(id);
+    this.setTileSelection(next);
+  }
+
+  /** Select all interactive token sprites whose bounding box intersects the marquee rect. */
+  private commitTokenMarqueeSelection(): void {
+    const marquee = rectFromPoints(
+      this.marqueeStartWorldX,
+      this.marqueeStartWorldY,
+      this.marqueeEndWorldX,
+      this.marqueeEndWorldY,
+    );
+
+    const hits: string[] = [];
+    this.playgroundLayer.iterateTokens((tokenId, sprite) => {
+      if (!sprite.canInteract) return;
+      const { x, y, size } = sprite.getTokenBounds();
+      if (rectsIntersect(marquee, { x, y, width: size, height: size })) {
+        hits.push(tokenId);
+      }
+    });
+
+    this.onTokensSelected?.(hits);
+  }
+
   /**
    * Handle an asset drop onto the canvas.
    * Converts screen coordinates to world coordinates and fires onTilePlaced.
@@ -434,6 +857,22 @@ export class CanvasManager {
   /** Returns the number of tile placements in the background layer. */
   getBackgroundLayerTilePlacementCount(): number {
     return this.backgroundLayer.tilePlacementCount;
+  }
+
+  /**
+   * Update which tile placements are locked. Locked sprites cannot be selected
+   * or moved in editor mode. Sprites not in `ids` are unlocked.
+   */
+  setLockedTilePlacements(ids: ReadonlySet<string>): void {
+    this.lockedTilePlacementIds.clear();
+    for (const id of ids) this.lockedTilePlacementIds.add(id);
+
+    const apply = (sprite: TilePlacementSprite): void => {
+      sprite.setLocked(ids.has(sprite.placementId));
+    };
+    this.backgroundLayer.iterateTilePlacements(apply);
+    this.playgroundLayer.iterateTilePlacements(apply);
+    this.foregroundLayer.iterateTilePlacements(apply);
   }
 
   private getLayerForCategory(
@@ -463,11 +902,21 @@ export class CanvasManager {
   destroy(): void {
     // Remove stage listeners before destroying the app
     this.app.stage.off('pointerdown', this.handleStagePointerDown);
+    this.app.stage.off('globalpointermove', this.handleStagePointerMove);
     this.app.stage.off('pointerup', this.handleStagePointerUp);
+    this.app.stage.off('pointerupoutside', this.handleStagePointerUp);
     // Remove native pan listeners
     this.app.canvas.removeEventListener('pointerdown', this.handlePanPointerDown);
     this.app.canvas.removeEventListener('pointermove', this.handlePanPointerMove);
     this.app.canvas.removeEventListener('pointerup', this.handlePanPointerUp);
+    this.app.canvas.removeEventListener('pointerdown', this.handleRightPanPointerDown);
+    this.app.canvas.removeEventListener('pointermove', this.handleRightPanPointerMove);
+    this.app.canvas.removeEventListener('pointerup', this.handleRightPanPointerUp);
+    this.app.canvas.removeEventListener('pointerdown', this.handleNativePointerDown);
+    this.app.canvas.removeEventListener('pointerup', this.handleNativePointerUp);
+    window.removeEventListener('keydown', this.handleArrowKey);
+    // Ensure marquee graphic is cleaned up if destroy() runs mid-drag
+    this.clearMarqueeGraphic();
     // In PixiJS v8, removeView is not a valid option — manually remove the canvas first
     this.app.canvas.remove();
     this.app.destroy();

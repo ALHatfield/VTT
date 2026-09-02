@@ -18,11 +18,21 @@ vi.mock('pixi.js', () => {
       this._fills = [];
       return this;
     }
-    moveTo(): this { return this; }
-    lineTo(): this { return this; }
-    closePath(): this { return this; }
-    stroke(): this { return this; }
-    rect(): this { return this; }
+    moveTo(): this {
+      return this;
+    }
+    lineTo(): this {
+      return this;
+    }
+    closePath(): this {
+      return this;
+    }
+    stroke(): this {
+      return this;
+    }
+    rect(): this {
+      return this;
+    }
     fill(opts: { color: number; alpha: number }): this {
       this._fills.push(opts);
       return this;
@@ -43,7 +53,9 @@ vi.mock('pixi.js', () => {
       this.children.push(child);
       return child;
     }
-    destroy(): void { /* noop */ }
+    destroy(): void {
+      /* noop */
+    }
   }
 
   class MockAlphaFilter {
@@ -152,5 +164,49 @@ describe('ForegroundLayer — setTokenVisionReveals()', () => {
 
     const fc = getFogCutouts(layer);
     expect(fc._circles).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ForegroundLayer — setViewMode()
+// ---------------------------------------------------------------------------
+
+type MockFogContainer = {
+  visible: boolean;
+  children: { visible: boolean }[];
+};
+
+function getFogContainer(l: ForegroundLayer): MockFogContainer {
+  return l.children[0] as unknown as MockFogContainer;
+}
+
+describe('ForegroundLayer — setViewMode()', () => {
+  let layer: ForegroundLayer;
+
+  beforeEach(() => {
+    layer = new ForegroundLayer();
+    layer.setMapBounds(2048, 2048);
+  });
+
+  it("'player' mode enables fog obfuscation (fogContainer visible)", () => {
+    layer.setViewMode('player');
+    layer.setFogRegions([]);
+    expect(getFogContainer(layer).visible).toBe(true);
+  });
+
+  it("'dm' mode disables fog obfuscation (fogContainer hidden)", () => {
+    layer.setViewMode('dm');
+    layer.setFogRegions([]);
+    expect(getFogContainer(layer).visible).toBe(false);
+  });
+
+  it('switching from player to dm hides fog container', () => {
+    layer.setViewMode('player');
+    layer.setFogRegions([]);
+    expect(getFogContainer(layer).visible).toBe(true);
+
+    layer.setViewMode('dm');
+    layer.setFogRegions([]);
+    expect(getFogContainer(layer).visible).toBe(false);
   });
 });

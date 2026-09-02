@@ -50,29 +50,51 @@ describe('useEditorMode', () => {
     console.error = consoleError;
   });
 
-  describe('selectedTilePlacementId', () => {
-    it('starts as null', () => {
+  describe('selectedTilePlacementIds', () => {
+    it('starts as an empty set', () => {
       const { result } = renderHook(() => useEditorMode(), { wrapper });
-      expect(result.current.selectedTilePlacementId).toBeNull();
+      expect(result.current.selectedTilePlacementIds.size).toBe(0);
     });
 
-    it('setSelectedTilePlacementId updates the value', () => {
+    it('setSelectedTilePlacementIds updates the value', () => {
       const { result } = renderHook(() => useEditorMode(), { wrapper });
       act(() => {
-        result.current.setSelectedTilePlacementId('placement-1');
+        result.current.setSelectedTilePlacementIds(new Set(['placement-1']));
       });
-      expect(result.current.selectedTilePlacementId).toBe('placement-1');
+      expect([...result.current.selectedTilePlacementIds]).toEqual(['placement-1']);
     });
 
-    it('toggleMode clears the selected placement', () => {
+    it('setSelectedTilePlacementIds supports multiple ids', () => {
       const { result } = renderHook(() => useEditorMode(), { wrapper });
       act(() => {
-        result.current.setSelectedTilePlacementId('placement-1');
+        result.current.setSelectedTilePlacementIds(new Set(['a', 'b', 'c']));
+      });
+      expect(result.current.selectedTilePlacementIds.size).toBe(3);
+      expect(result.current.selectedTilePlacementIds.has('a')).toBe(true);
+      expect(result.current.selectedTilePlacementIds.has('b')).toBe(true);
+      expect(result.current.selectedTilePlacementIds.has('c')).toBe(true);
+    });
+
+    it('setSelectedTilePlacementIds with an empty set clears the selection', () => {
+      const { result } = renderHook(() => useEditorMode(), { wrapper });
+      act(() => {
+        result.current.setSelectedTilePlacementIds(new Set(['a', 'b']));
+      });
+      act(() => {
+        result.current.setSelectedTilePlacementIds(new Set());
+      });
+      expect(result.current.selectedTilePlacementIds.size).toBe(0);
+    });
+
+    it('toggleMode clears the selected placements', () => {
+      const { result } = renderHook(() => useEditorMode(), { wrapper });
+      act(() => {
+        result.current.setSelectedTilePlacementIds(new Set(['placement-1', 'placement-2']));
       });
       act(() => {
         result.current.toggleMode();
       });
-      expect(result.current.selectedTilePlacementId).toBeNull();
+      expect(result.current.selectedTilePlacementIds.size).toBe(0);
     });
   });
 });

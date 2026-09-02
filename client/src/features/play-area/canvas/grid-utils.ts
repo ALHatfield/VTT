@@ -58,3 +58,20 @@ export function snappedPixelToGridCoords(
     gridY: Math.max(0, Math.round(pixelY / cellSize)),
   };
 }
+
+/**
+ * Snap pixel coordinates to the center of the nearest grid cell.
+ * Used by the measure tool for start/end point snapping.
+ */
+export function snapToGridCenter(
+  pixelX: number,
+  pixelY: number,
+  cellSize: number,
+): { x: number; y: number } {
+  const gridX = Math.floor(pixelX / cellSize);
+  const gridY = Math.floor(pixelY / cellSize);
+  return {
+    x: gridX * cellSize + cellSize / 2,
+    y: gridY * cellSize + cellSize / 2,
+  };
+}

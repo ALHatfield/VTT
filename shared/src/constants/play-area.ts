@@ -13,6 +13,21 @@ export const TOKEN_SIZE_MAX = 4;
 export const DEFAULT_TOKEN_COLOR = '#4a9eff';
 export const DEFAULT_TOKEN_SIZE = 1;
 
+// Token aura constants (Phase 4I)
+export const AURA_RADIUS_MIN = 0;
+export const AURA_RADIUS_MAX = 12;
+export const DEFAULT_AURA_COLOR = '#4a9eff';
+export const CONDITION_AURA_COLORS = {
+  stunned: '#e05050',
+  poisoned: '#cc5de8',
+  blessed: '#ffd43b',
+} as const;
+export const PRESET_AURA_TEMPLATES = {
+  auraOfProtection: { radius: 2, color: '#4a9eff', type: 'presence' },
+  healingAura: { radius: 3, color: '#4caf6e', type: 'presence' },
+  dangerZone: { radius: 4, color: '#e05050', type: 'presence' },
+} as const;
+
 // Socket event constants (Phase 4C)
 // Client → Server events use present tense; Server → Client use past tense
 export const PLAY_AREA_EVENTS = {
@@ -30,6 +45,13 @@ export const PLAY_AREA_EVENTS = {
 } as const;
 
 export type PlayAreaEvent = (typeof PLAY_AREA_EVENTS)[keyof typeof PLAY_AREA_EVENTS];
+
+export const AURA_EVENTS = {
+  AURA_UPDATE: 'play-area:aura:update',
+  AURA_UPDATED: 'play-area:aura:updated',
+} as const;
+
+export type AuraEvent = (typeof AURA_EVENTS)[keyof typeof AURA_EVENTS];
 
 // Socket debounce delay for token drag events (ms)
 export const SOCKET_TOKEN_MOVE_DEBOUNCE_MS = 100;
@@ -66,9 +88,11 @@ export const FOG_EVENTS = {
   // Client → Server
   FOG_REVEAL: 'play-area:fog:reveal',
   FOG_HIDE: 'play-area:fog:hide',
+  FOG_REGION_DELETE: 'play-area:fog:region:delete',
   // Server → Client
   FOG_REVEALED: 'play-area:fog:revealed',
   FOG_HIDDEN: 'play-area:fog:hidden',
+  FOG_REGION_DELETED: 'play-area:fog:region:deleted',
 } as const;
 
 export type FogEvent = (typeof FOG_EVENTS)[keyof typeof FOG_EVENTS];
@@ -88,3 +112,56 @@ export const TOKEN_VISION_EVENTS = {
 } as const;
 
 export type TokenVisionEvent = (typeof TOKEN_VISION_EVENTS)[keyof typeof TOKEN_VISION_EVENTS];
+
+// Initiative constants (Phase 4H)
+export const INITIATIVE_EVENTS = {
+  /** Client → Server: DM starts combat for the current campaign. */
+  INITIATIVE_START: 'play-area:initiative:start',
+  /** Client → Server: DM advances to the next combatant. */
+  INITIATIVE_ADVANCE: 'play-area:initiative:advance',
+  /** Client → Server: DM ends combat and clears initiative. */
+  INITIATIVE_END: 'play-area:initiative:end',
+  /** Client → Server: DM reorders the turn tracker. */
+  INITIATIVE_REORDER: 'play-area:initiative:reorder',
+  /** Server → Client: current initiative state changed. */
+  INITIATIVE_UPDATED: 'play-area:initiative:updated',
+} as const;
+
+export type InitiativeEvent = (typeof INITIATIVE_EVENTS)[keyof typeof INITIATIVE_EVENTS];
+
+// Drawing tool constants (Phase 4K)
+export const DRAW_THROTTLE_MS = 33; // ~30fps
+export const DRAW_DEFAULT_COLOR = '#e53935';
+export const DRAW_DEFAULT_WIDTH = 3;
+export const DRAW_WIDTH_MIN = 1;
+export const DRAW_WIDTH_MAX = 20;
+
+export const DRAW_EVENTS = {
+  // Client → Server
+  DRAW_STROKE: 'play-area:draw:stroke',
+  DRAW_CLEAR: 'play-area:draw:clear',
+  // Server → Client
+  DRAW_STROKED: 'play-area:draw:stroked',
+  DRAW_CLEARED: 'play-area:draw:cleared',
+} as const;
+
+export type DrawEvent = (typeof DRAW_EVENTS)[keyof typeof DRAW_EVENTS];
+
+// Measure tool constants (Phase 4J)
+export const MEASURE_EVENTS = {
+  /** Client → Server: broadcast measurement line while dragging. */
+  MEASURE_BROADCAST: 'play-area:measure:broadcast',
+  /** Client → Server: clear active measurement line on mouseup or tool switch. */
+  MEASURE_CLEAR: 'play-area:measure:clear',
+  /** Server → Client: relay measurement broadcast to campaign room. */
+  MEASURE_RELAYED: 'play-area:measure:relayed',
+  /** Server → Client: relay measurement clear to campaign room. */
+  MEASURE_CLEARED: 'play-area:measure:cleared',
+} as const;
+
+export type MeasureEvent = (typeof MEASURE_EVENTS)[keyof typeof MEASURE_EVENTS];
+
+/** Line width in pixels for the measurement line overlay. */
+export const MEASURE_LINE_WIDTH = 2;
+/** Alpha for the measurement line overlay. */
+export const MEASURE_LINE_ALPHA = 0.8;

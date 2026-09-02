@@ -28,6 +28,11 @@ function makeToken(overrides: Partial<Token> = {}): Token {
     maxHp: 40,
     ac: 15,
     visionRadius: 6,
+    auraRadius: null,
+    auraColor: null,
+    auraVisible: false,
+    auraType: null,
+    auraCondition: null,
     iconUrl: null,
     ownerId: 'user-1',
     ownerName: 'Gandalf',
@@ -58,6 +63,8 @@ function renderCard(
     canvasX = 400,
     canvasY = 300,
     onHPChange = vi.fn(),
+    canEditVisionRadius = false,
+    onAuraChange = vi.fn(),
   }: {
     isSelected?: boolean;
     canEditHP?: boolean;
@@ -65,6 +72,8 @@ function renderCard(
     canvasX?: number;
     canvasY?: number;
     onHPChange?: (tokenId: string, hp: number) => void;
+    canEditVisionRadius?: boolean;
+    onAuraChange?: Parameters<typeof TokenHoverCard>[0]['onAuraChange'];
   } = {},
 ): ReturnType<typeof render> {
   return render(
@@ -75,8 +84,10 @@ function renderCard(
       isSelected={isSelected}
       canEditHP={canEditHP}
       canRoll={canRoll}
+      canEditVisionRadius={canEditVisionRadius}
       onClose={vi.fn()}
       onHPChange={onHPChange}
+      onAuraChange={onAuraChange}
       canvasWrapperRef={makeWrapperRef()}
     />,
   );
@@ -164,6 +175,51 @@ describe('TokenHoverCard', () => {
       renderCard(makeToken(), { isSelected: true, canRoll: false });
       expect(screen.queryByText('Attack')).not.toBeInTheDocument();
       expect(screen.queryByText('Damage')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('aura controls', () => {
+    it('shows aura controls only for selected DM-editable tokens', () => {
+      renderCard(makeToken(), { isSelected: false, canEditVisionRadius: true });
+      expect(screen.queryByText('Aura')).not.toBeInTheDocument();
+
+      renderCard(makeToken(), { isSelected: true, canEditVisionRadius: true });
+      expect(screen.getByText('Aura')).toBeInTheDocument();
+    });
+
+    it('emits an aura preset update', async () => {
+      const user = userEvent.setup();
+      const onAuraChange = vi.fn();
+      renderCard(makeToken(), { isSelected: true, canEditVisionRadius: true, onAuraChange });
+
+      await user.click(screen.getByText('Protection'));
+
+      expect(onAuraChange).toHaveBeenCalledWith(
+        'tok-1',
+        expect.objectContaining({
+          auraVisible: true,
+          auraRadius: 2,
+          auraColor: '#4a9eff',
+          auraType: 'presence',
+        }),
+      );
+    });
+
+    it('maps condition status to a semantic aura color', async () => {
+      const user = userEvent.setup();
+      const onAuraChange = vi.fn();
+      renderCard(makeToken({ auraType: 'condition', auraCondition: 'stunned' }), {
+        isSelected: true,
+        canEditVisionRadius: true,
+        onAuraChange,
+      });
+
+      await user.selectOptions(screen.getByDisplayValue('Stunned'), 'poisoned');
+
+      expect(onAuraChange).toHaveBeenCalledWith(
+        'tok-1',
+        expect.objectContaining({ auraCondition: 'poisoned', auraColor: '#cc5de8' }),
+      );
     });
   });
 

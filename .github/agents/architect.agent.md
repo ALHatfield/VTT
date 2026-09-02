@@ -131,8 +131,11 @@ erDiagram
     Campaign ||--o{ FogRegion : "fogRegions"
     Campaign ||--o{ Character : "characters"
     Campaign ||--o{ TileAsset : "tileAssets"
+    Campaign ||--o{ TilePlacement : "tilePlacements"
     Scene ||--o{ Token : "tokens"
     Scene ||--o{ FogRegion : "fogRegions"
+    Scene ||--o{ TilePlacement : "tilePlacements"
+    TileAsset ||--o{ TilePlacement : "placements"
 
     User {
         uuid id PK
@@ -162,6 +165,7 @@ erDiagram
         uuid campaignId FK
         uuid userId FK
         enum role "dm | player | observer"
+        string color
         datetime joinedAt
     }
 
@@ -194,6 +198,11 @@ erDiagram
         int maxHp
         int ac
         int visionRadius
+        int auraRadius
+        string auraColor
+        bool auraVisible
+        string auraType
+        string auraCondition
         enum npcSubtype "ally | enemy"
         datetime createdAt
         datetime updatedAt
@@ -248,6 +257,23 @@ erDiagram
         string thumbnailUrl
         int width
         int height
+        enum category "background | playground | foreground"
+        enum source "uploaded | builtin"
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    TilePlacement {
+        uuid id PK
+        uuid sceneId FK
+        uuid assetId FK
+        uuid campaignId FK
+        float x
+        float y
+        float width
+        float height
+        float rotation
+        int zIndex
         enum category "background | playground | foreground"
         datetime createdAt
         datetime updatedAt

@@ -4,13 +4,13 @@
 
 ## Feature Status
 
-| Slug        | Feature         | Phases           | Status      | Current Phase            |
-| ----------- | --------------- | ---------------- | ----------- | ------------------------ |
-| `auth`      | Auth & Sessions | 1A–1B            | In Progress | 1A Complete              |
-| `portal`    | Portal          | 2A–2B            | In Progress | 2A Complete              |
-| `campaigns` | Campaigns       | 3A–3B            | Complete    | 3B Complete              |
-| `play-area` | Play Area       | 4A–4K, 4F.1–4F.5 | In Progress | 4F.2 Complete, 4F.3 Next |
-| `editor`    | Campaign Editor | 5A–5E, 5A.1      | In Progress | 5A.1 Complete, 5B Next   |
+| Slug        | Feature         | Phases           | Status      | Current Phase |
+| ----------- | --------------- | ---------------- | ----------- | ------------- |
+| `auth`      | Auth & Sessions | 1A–1B            | In Progress | 1A Complete   |
+| `portal`    | Portal          | 2A–2B            | In Progress | 2A Complete   |
+| `campaigns` | Campaigns       | 3A–3B            | Complete    | 3B Complete   |
+| `play-area` | Play Area       | 4A–4K, 4F.1–4F.5 | In Progress | 4I Complete   |
+| `editor`    | Campaign Editor | 5A–5E, 5A.1      | Complete    | 5E Complete   |
 
 | `characters` | Character Sheets | 6A–6E | In Progress | 6A Complete |
 

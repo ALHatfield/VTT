@@ -1,0 +1,318 @@
+.toolbar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 52px;
+  flex-shrink: 0;
+  background: var(--color-bg-secondary, #16213e);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 4px;
+  gap: 4px;
+  z-index: 9;
+  overflow: visible;
+  transition: width 0.2s ease;
+}
+
+.toolBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 44px;
+  padding: 4px 2px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--color-text-muted, #8b8b9e);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.toolBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+.toolBtn.active {
+  background: rgba(121, 199, 255, 0.15);
+  border-color: rgba(121, 199, 255, 0.5);
+  color: #79c7ff;
+}
+
+.icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.label {
+  font-size: 0.55rem;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.toolGroup {
+  position: relative;
+  width: 100%;
+}
+
+/* Tool option panels appear beside the fixed-width toolbar. */
+.toolPanel {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+  width: 152px;
+  padding: 6px 4px;
+  background: var(--color-bg-secondary, #16213e);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 6px 6px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 1;
+}
+
+/* Measure tool panel */
+.measurePanel {
+  align-items: flex-start;
+}
+
+.measureToggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.measureToggle input {
+  accent-color: #79c7ff;
+  cursor: pointer;
+}
+
+/* Divider between general tools and DM-only tools */
+.divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+/* Fog of War options */
+.fogPanel {
+  gap: 6px;
+}
+
+.fogSubMode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fogModeBtn {
+  width: 100%;
+  padding: 3px 4px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.6rem;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.fogModeBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+.fogModeBtnActive {
+  background: rgba(121, 199, 255, 0.15);
+  border-color: rgba(121, 199, 255, 0.5);
+  color: #79c7ff;
+}
+
+.fogViewToggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.fogViewToggle input {
+  accent-color: #79c7ff;
+  cursor: pointer;
+}
+
+/* NPC token placement options */
+.npcPanel {
+  gap: 4px;
+}
+
+.npcDragItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 4px 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.6rem;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: grab;
+  user-select: none;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.npcDragItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+.npcDragItem:active {
+  cursor: grabbing;
+}
+
+.npcDragItemAlly {
+  border-color: rgba(100, 200, 100, 0.4);
+  color: rgba(100, 200, 100, 0.9);
+}
+
+.npcDragItemAlly:hover {
+  background: rgba(100, 200, 100, 0.08);
+  border-color: rgba(100, 200, 100, 0.7);
+  color: rgb(100, 200, 100);
+}
+
+.npcDragItemEnemy {
+  border-color: rgba(220, 80, 80, 0.4);
+  color: rgba(220, 80, 80, 0.9);
+}
+
+.npcDragItemEnemy:hover {
+  background: rgba(220, 80, 80, 0.08);
+  border-color: rgba(220, 80, 80, 0.7);
+  color: rgb(220, 80, 80);
+}
+
+/* Draw tool options */
+.drawPanel {
+  gap: 8px;
+}
+
+.drawSubMode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.drawModeBtn {
+  width: 100%;
+  padding: 3px 4px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.6rem;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.drawModeBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+.drawModeBtnActive {
+  background: rgba(121, 199, 255, 0.15);
+  border-color: rgba(121, 199, 255, 0.5);
+  color: #79c7ff;
+}
+
+.drawColorLabel,
+.drawWidthLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.drawLabelText {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted, #8b8b9e);
+}
+
+.drawColorInput {
+  width: 100%;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 0 2px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.drawWidthInput {
+  width: 100%;
+  accent-color: #79c7ff;
+  cursor: pointer;
+}
+
+.drawClearBtn {
+  width: 100%;
+  padding: 4px;
+  background: rgba(220, 80, 80, 0.12);
+  border: 1px solid rgba(220, 80, 80, 0.3);
+  border-radius: 4px;
+  color: rgba(220, 80, 80, 0.9);
+  font-size: 0.55rem;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.drawClearBtn:hover {
+  background: rgba(220, 80, 80, 0.2);
+  border-color: rgba(220, 80, 80, 0.6);
+  color: rgb(220, 80, 80);
+}

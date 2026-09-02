@@ -196,10 +196,18 @@
   transition: width 0.15s ease;
 }
 
-.healthy { background: #4caf6e; }
-.wounded { background: #f0a030; }
-.critical { background: #e05050; }
-.dead { background: #555; }
+.healthy {
+  background: #4caf6e;
+}
+.wounded {
+  background: #f0a030;
+}
+.critical {
+  background: #e05050;
+}
+.dead {
+  background: #555;
+}
 
 .hpRow {
   display: flex;
@@ -259,6 +267,91 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Aura controls ─────────────────────────────────────────── */
+
+.auraSection {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.auraHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.toggleLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+.presetRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.presetButton {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary, #e8e8e8);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.65rem;
+  padding: 3px 4px;
+}
+
+.presetButton:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.auraGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.65rem;
+}
+
+.compactInput,
+.compactSelect,
+.colorInput {
+  min-width: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 3px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-family: inherit;
+  font-size: 0.7rem;
+}
+
+.compactInput,
+.compactSelect {
+  height: 24px;
+  padding: 2px 4px;
+}
+
+.colorInput {
+  height: 24px;
+  padding: 2px;
+}
+
 /* ── Quick rolls ────────────────────────────────────────────── */
 
 .quickRolls {
@@ -277,7 +370,9 @@
   padding: 4px 0;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 
 .rollButton:hover:not(:disabled) {

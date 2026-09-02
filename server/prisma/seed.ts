@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { BCRYPT_ROUNDS } from '@vtt/shared';
+import { BCRYPT_ROUNDS, PLAYER_COLOR_PALETTE } from '@vtt/shared';
 import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -105,14 +105,14 @@ async function main(): Promise<void> {
 
   // Ensure each seed user has a role in the seed campaign
   const SEED_CAMPAIGN_MEMBERS = [
-    { userId: 'dm-seed-user-001', role: 'dm' as const },
-    { userId: 'player-seed-user-001', role: 'player' as const },
-    { userId: 'player-seed-user-002', role: 'player' as const },
-    { userId: 'player-seed-user-003', role: 'player' as const },
-    { userId: 'player-seed-user-004', role: 'player' as const },
-    { userId: 'player-seed-user-005', role: 'player' as const },
-    { userId: 'player-seed-user-006', role: 'player' as const },
-    { userId: 'observer-seed-user-001', role: 'observer' as const },
+    { userId: 'dm-seed-user-001', role: 'dm' as const, color: PLAYER_COLOR_PALETTE[0] },
+    { userId: 'player-seed-user-001', role: 'player' as const, color: PLAYER_COLOR_PALETTE[1] },
+    { userId: 'player-seed-user-002', role: 'player' as const, color: PLAYER_COLOR_PALETTE[2] },
+    { userId: 'player-seed-user-003', role: 'player' as const, color: PLAYER_COLOR_PALETTE[3] },
+    { userId: 'player-seed-user-004', role: 'player' as const, color: PLAYER_COLOR_PALETTE[4] },
+    { userId: 'player-seed-user-005', role: 'player' as const, color: PLAYER_COLOR_PALETTE[5] },
+    { userId: 'player-seed-user-006', role: 'player' as const, color: PLAYER_COLOR_PALETTE[6] },
+    { userId: 'observer-seed-user-001', role: 'observer' as const, color: PLAYER_COLOR_PALETTE[7] },
   ];
 
   for (const member of SEED_CAMPAIGN_MEMBERS) {
@@ -123,11 +123,12 @@ async function main(): Promise<void> {
           userId: member.userId,
         },
       },
-      update: { role: member.role },
+      update: { role: member.role, color: member.color },
       create: {
         campaignId: SEED_CAMPAIGN_ID,
         userId: member.userId,
         role: member.role,
+        color: member.color,
       },
     });
     console.log(`  ✓ Added ${member.role} to seed campaign`);
@@ -148,7 +149,14 @@ async function main(): Promise<void> {
 
   await prisma.scene.upsert({
     where: { id: SEED_SCENE_ID },
-    update: {},
+    update: {
+      name: 'Default Scene',
+      imageUrl: null,
+      width: 2048,
+      height: 2048,
+      cellSize: 70,
+      isActive: true,
+    },
     create: {
       id: SEED_SCENE_ID,
       campaignId: SEED_CAMPAIGN_ID,
@@ -166,49 +174,116 @@ async function main(): Promise<void> {
     userId: string;
     username: string;
     color: string;
+    x: number;
+    y: number;
+    visionRadius: number;
+    auraRadius: number | null;
+    auraColor: string | null;
+    auraVisible: boolean;
+    auraType: string | null;
+    auraCondition: string | null;
   }> = [
     {
       id: 'token-seed-player-001',
       userId: 'player-seed-user-001',
       username: 'TestPlayer1',
       color: '#4a9eff',
+      x: 8,
+      y: 12,
+      visionRadius: 3,
+      auraRadius: 2,
+      auraColor: '#4a9eff',
+      auraVisible: true,
+      auraType: 'presence',
+      auraCondition: null,
     },
     {
       id: 'token-seed-player-002',
       userId: 'player-seed-user-002',
       username: 'TestPlayer2',
       color: '#ff6b6b',
+      x: 1,
+      y: 5,
+      visionRadius: 3,
+      auraRadius: 3,
+      auraColor: '#4caf6e',
+      auraVisible: true,
+      auraType: 'presence',
+      auraCondition: null,
     },
     {
       id: 'token-seed-player-003',
       userId: 'player-seed-user-003',
       username: 'TestPlayer3',
       color: '#51cf66',
+      x: 2,
+      y: 0,
+      visionRadius: 3,
+      auraRadius: null,
+      auraColor: null,
+      auraVisible: false,
+      auraType: null,
+      auraCondition: null,
     },
     {
       id: 'token-seed-player-004',
       userId: 'player-seed-user-004',
       username: 'TestPlayer4',
       color: '#ffd43b',
+      x: 0,
+      y: 1,
+      visionRadius: 6,
+      auraRadius: null,
+      auraColor: null,
+      auraVisible: false,
+      auraType: null,
+      auraCondition: null,
     },
     {
       id: 'token-seed-player-005',
       userId: 'player-seed-user-005',
       username: 'TestPlayer5',
       color: '#cc5de8',
+      x: 1,
+      y: 1,
+      visionRadius: 6,
+      auraRadius: null,
+      auraColor: null,
+      auraVisible: false,
+      auraType: null,
+      auraCondition: null,
     },
     {
       id: 'token-seed-player-006',
       userId: 'player-seed-user-006',
       username: 'TestPlayer6',
       color: '#ff922b',
+      x: 2,
+      y: 1,
+      visionRadius: 6,
+      auraRadius: null,
+      auraColor: null,
+      auraVisible: false,
+      auraType: null,
+      auraCondition: null,
     },
   ];
 
   for (const t of PLAYER_TOKEN_DEFAULTS) {
     await prisma.token.upsert({
       where: { id: t.id },
-      update: { name: t.username, color: t.color },
+      update: {
+        name: t.username,
+        color: t.color,
+        x: t.x,
+        y: t.y,
+        visionRadius: t.visionRadius,
+        auraRadius: t.auraRadius,
+        auraColor: t.auraColor,
+        auraVisible: t.auraVisible,
+        auraType: t.auraType,
+        auraCondition: t.auraCondition,
+      },
       create: {
         id: t.id,
         sceneId: SEED_SCENE_ID,
@@ -217,9 +292,15 @@ async function main(): Promise<void> {
         name: t.username,
         type: 'player',
         color: t.color,
-        x: 0,
-        y: 0,
+        x: t.x,
+        y: t.y,
         size: 1,
+        visionRadius: t.visionRadius,
+        auraRadius: t.auraRadius,
+        auraColor: t.auraColor,
+        auraVisible: t.auraVisible,
+        auraType: t.auraType,
+        auraCondition: t.auraCondition,
       },
     });
     console.log(`  ✓ Upserted player token for ${t.username}`);
@@ -234,8 +315,14 @@ async function main(): Promise<void> {
       type: 'npc' as const,
       npcSubtype: 'ally' as const,
       color: '#51cf66',
-      x: 8,
-      y: 4,
+      x: 4,
+      y: 3,
+      visionRadius: 6,
+      auraRadius: null,
+      auraColor: null,
+      auraVisible: false,
+      auraType: null,
+      auraCondition: null,
     },
     {
       id: 'token-seed-npc-enemy-001',
@@ -243,15 +330,63 @@ async function main(): Promise<void> {
       type: 'npc' as const,
       npcSubtype: 'enemy' as const,
       color: '#ff6b6b',
-      x: 12,
-      y: 8,
+      x: 16,
+      y: 12,
+      visionRadius: 6,
+      auraRadius: 4,
+      auraColor: '#e05050',
+      auraVisible: true,
+      auraType: 'presence',
+      auraCondition: null,
+    },
+    {
+      id: 'token-seed-npc-ally-002',
+      name: 'Ally',
+      type: 'npc' as const,
+      npcSubtype: 'ally' as const,
+      color: '#4a9eff',
+      x: 6,
+      y: 3,
+      visionRadius: 6,
+      auraRadius: 3,
+      auraColor: '#4caf6e',
+      auraVisible: true,
+      auraType: 'presence',
+      auraCondition: null,
+    },
+    {
+      id: 'token-seed-npc-enemy-002',
+      name: 'Enemy',
+      type: 'npc' as const,
+      npcSubtype: 'enemy' as const,
+      color: '#4a9eff',
+      x: 20,
+      y: 9,
+      visionRadius: 6,
+      auraRadius: null,
+      auraColor: null,
+      auraVisible: false,
+      auraType: null,
+      auraCondition: null,
     },
   ];
 
   for (const t of NPC_TOKENS) {
     await prisma.token.upsert({
       where: { id: t.id },
-      update: { name: t.name, color: t.color, npcSubtype: t.npcSubtype },
+      update: {
+        name: t.name,
+        color: t.color,
+        x: t.x,
+        y: t.y,
+        npcSubtype: t.npcSubtype,
+        visionRadius: t.visionRadius,
+        auraRadius: t.auraRadius,
+        auraColor: t.auraColor,
+        auraVisible: t.auraVisible,
+        auraType: t.auraType,
+        auraCondition: t.auraCondition,
+      },
       create: {
         id: t.id,
         sceneId: SEED_SCENE_ID,
@@ -264,10 +399,23 @@ async function main(): Promise<void> {
         x: t.x,
         y: t.y,
         size: 1,
+        visionRadius: t.visionRadius,
+        auraRadius: t.auraRadius,
+        auraColor: t.auraColor,
+        auraVisible: t.auraVisible,
+        auraType: t.auraType,
+        auraCondition: t.auraCondition,
       },
     });
     console.log(`  ✓ Upserted ${t.npcSubtype} NPC token: ${t.name}`);
   }
+
+  await prisma.token.deleteMany({
+    where: {
+      campaignId: SEED_CAMPAIGN_ID,
+      id: { notIn: [...PLAYER_TOKEN_DEFAULTS, ...NPC_TOKENS].map((token) => token.id) },
+    },
+  });
 
   console.log('Seeding sample characters...');
 
@@ -358,6 +506,58 @@ async function main(): Promise<void> {
       create: c,
     });
     console.log(`  ✓ Upserted character: ${c.name}`);
+  }
+
+  console.log('Seeding fog regions...');
+  const SEED_FOG_REGIONS = [
+    {
+      id: '9082ad2d-d1dc-47bf-ba04-7eaa87430cdd',
+      vertices: [
+        { x: 478.0040241448692, y: 789.1187122736419 },
+        { x: 700.523138832998, y: 789.1187122736419 },
+        { x: 700.523138832998, y: 991.0342052313883 },
+        { x: 478.0040241448692, y: 991.0342052313883 },
+      ],
+    },
+    {
+      id: '0fb05729-ea2a-4be7-a629-1a987f764bd0',
+      vertices: [
+        { x: 902.4386317907445, y: 694.3420523138833 },
+        { x: 1030.181086519115, y: 694.3420523138833 },
+        { x: 1030.181086519115, y: 1118.776659959758 },
+        { x: 902.4386317907445, y: 1118.776659959758 },
+      ],
+    },
+    {
+      id: '41680482-4f26-4def-b4b5-f18df192688b',
+      vertices: [
+        { x: 659.3158953722334, y: 826.2052313883299 },
+        { x: 1260.941649899396, y: 826.2052313883299 },
+        { x: 1260.941649899396, y: 920.9818913480885 },
+        { x: 659.3158953722334, y: 920.9818913480885 },
+      ],
+    },
+  ];
+
+  await prisma.fogRegion.deleteMany({
+    where: {
+      sceneId: SEED_SCENE_ID,
+      id: { notIn: SEED_FOG_REGIONS.map((region) => region.id) },
+    },
+  });
+
+  for (const region of SEED_FOG_REGIONS) {
+    await prisma.fogRegion.upsert({
+      where: { id: region.id },
+      update: { vertices: region.vertices },
+      create: {
+        ...region,
+        campaignId: SEED_CAMPAIGN_ID,
+        sceneId: SEED_SCENE_ID,
+        createdByUserId: 'dm-seed-user-001',
+      },
+    });
+    console.log(`  ✓ Upserted fog region: ${region.id}`);
   }
 
   // ---------------------------------------------------------------------------
@@ -471,6 +671,48 @@ async function main(): Promise<void> {
     });
     console.log(`  ✓ Upserted built-in asset: ${asset.filename}`);
   }
+
+  // ---------------------------------------------------------------------------
+  // Seed tile placements (Phase 5B)
+  // ---------------------------------------------------------------------------
+  console.log('Seeding tile placements (Phase 5B)...');
+
+  const SEED_PLACEMENT_IDS = new Set(['placement-seed-tile-001']);
+
+  // Remove any non-seed placements on the seed scene (e.g. manually placed during dev)
+  await prisma.tilePlacement.deleteMany({
+    where: {
+      sceneId: SEED_SCENE_ID,
+      id: { notIn: [...SEED_PLACEMENT_IDS] },
+    },
+  });
+
+  await prisma.tilePlacement.upsert({
+    where: { id: 'placement-seed-tile-001' },
+    update: {
+      x: 0,
+      y: 40,
+      width: 1733,
+      height: 1314,
+      rotation: 0,
+      zIndex: 0,
+      category: 'background',
+    },
+    create: {
+      id: 'placement-seed-tile-001',
+      sceneId: SEED_SCENE_ID,
+      campaignId: SEED_CAMPAIGN_ID,
+      assetId: 'asset-seed-tile-001',
+      x: 0,
+      y: 40,
+      width: 1733,
+      height: 1314,
+      rotation: 0,
+      zIndex: 0,
+      category: 'background',
+    },
+  });
+  console.log('  ✓ Upserted tile placement: tile1.png');
 
   console.log('Seed complete.');
 }

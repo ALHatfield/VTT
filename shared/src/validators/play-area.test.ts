@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { tokenCreatePayloadSchema, tokenUpdatePayloadSchema } from './play-area.js';
+import {
+  initiativeAdvancePayloadSchema,
+  initiativeEndPayloadSchema,
+  initiativeReorderPayloadSchema,
+  initiativeStartPayloadSchema,
+  tokenCreatePayloadSchema,
+  tokenUpdatePayloadSchema,
+} from './play-area.js';
 
 // ---------------------------------------------------------------------------
 // Phase 4F.2 — npcSubtype validator tests
@@ -38,7 +45,13 @@ describe('tokenCreatePayloadSchema — npcSubtype (Phase 4F.2)', () => {
   });
 
   it('rejects npcSubtype on non-NPC token types', () => {
-    const result = tokenCreatePayloadSchema.safeParse({ name: 'Boss', type: 'monster', x: 0, y: 0, npcSubtype: 'ally' });
+    const result = tokenCreatePayloadSchema.safeParse({
+      name: 'Boss',
+      type: 'monster',
+      x: 0,
+      y: 0,
+      npcSubtype: 'ally',
+    });
     expect(result.success).toBe(false);
     if (!result.success) {
       const paths = result.error.issues.map((i) => i.path.join('.'));
@@ -68,6 +81,69 @@ describe('tokenUpdatePayloadSchema — npcSubtype (Phase 4F.2)', () => {
 
   it('rejects invalid npcSubtype string on update', () => {
     const result = tokenUpdatePayloadSchema.safeParse({ npcSubtype: 'neutral' });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 4H — initiative validator tests
+// ---------------------------------------------------------------------------
+
+describe('initiative payload schemas (Phase 4H)', () => {
+  it('accepts initiative start with an optional token list', () => {
+    const result = initiativeStartPayloadSchema.safeParse({
+      campaignId: 'campaign-1',
+      tokenIds: ['token-1', 'token-2'],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects initiative start with an explicit empty token list', () => {
+    const result = initiativeStartPayloadSchema.safeParse({
+      campaignId: 'campaign-1',
+      tokenIds: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects duplicate initiative start token ids', () => {
+    const result = initiativeStartPayloadSchema.safeParse({
+      campaignId: 'campaign-1',
+      tokenIds: ['token-1', 'token-1'],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts initiative advance payloads', () => {
+    const result = initiativeAdvancePayloadSchema.safeParse({ campaignId: 'campaign-1' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts initiative end payloads', () => {
+    const result = initiativeEndPayloadSchema.safeParse({ campaignId: 'campaign-1' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects empty initiative reorder lists', () => {
+    const result = initiativeReorderPayloadSchema.safeParse({
+      campaignId: 'campaign-1',
+      tokenIds: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects duplicate initiative reorder token ids', () => {
+    const result = initiativeReorderPayloadSchema.safeParse({
+      campaignId: 'campaign-1',
+      tokenIds: ['token-1', 'token-1'],
+    });
+
     expect(result.success).toBe(false);
   });
 });

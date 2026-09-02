@@ -3,6 +3,7 @@ import type { FederatedPointerEvent } from 'pixi.js';
 import { Assets, Circle, Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
 
 import type { Token } from '@vtt/shared';
+import { CONDITION_AURA_COLORS, DEFAULT_AURA_COLOR } from '@vtt/shared';
 
 import { snappedPixelToGridCoords, snapToGrid } from './grid-utils';
 
@@ -28,11 +29,16 @@ const HP_COLOR_CRITICAL = 0xe05050; // > 0%
 const HP_COLOR_DEAD = 0x555555; // 0%
 const HP_BAR_HEIGHT = 4;
 const HP_BAR_MARGIN = 3; // horizontal inset from token edge
+const AURA_FILL_ALPHA = 0.12;
+const AURA_STROKE_ALPHA = 0.75;
+const AURA_STROKE_WIDTH = 2;
 
 export class TokenSprite extends Container {
   private readonly circle: Graphics;
   private readonly nameLabel: Text;
   private readonly selectionRing: Graphics;
+  private readonly activeTurnRing: Graphics;
+  private readonly auraLayer: Graphics;
   private readonly ghostIndicator: Graphics;
   private readonly snapHighlight: Graphics;
   private readonly dragLine: Graphics;
@@ -43,7 +49,7 @@ export class TokenSprite extends Container {
   private iconSprite: Sprite | null = null;
   private iconMask: Graphics | null = null;
   /** True once destroy() has run — guards the async iconUrl loader from touching a dead container. */
-  private destroyed = false;
+  private _isDestroyed = false;
   private _token: Token;
   private readonly cellSize: number;
   readonly canInteract: boolean;
@@ -74,7 +80,8 @@ export class TokenSprite extends Container {
     this.canInteract = canInteract;
 
     const tokenSize = token.size * cellSize;
-    const radius = tokenSize / 2 - 4;
+    // 38% of cell radius → token occupies 76% of the cell, leaving a clear gap at all zoom levels
+    const radius = Math.round(tokenSize * 0.38);
     const cx = tokenSize / 2;
     const cy = tokenSize / 2;
 
@@ -90,6 +97,11 @@ export class TokenSprite extends Container {
     this.dragLine.eventMode = 'none';
     this.addChild(this.dragLine);
 
+    this.auraLayer = new Graphics();
+    this.auraLayer.eventMode = 'none';
+    this.addChild(this.auraLayer);
+    this.drawAura();
+
     // Selection ring — drawn behind the main circle, hidden by default
     this.selectionRing = new Graphics();
     this.selectionRing.circle(cx, cy, radius + 5);
@@ -97,6 +109,13 @@ export class TokenSprite extends Container {
     this.selectionRing.visible = false;
     this.selectionRing.eventMode = 'none';
     this.addChild(this.selectionRing);
+
+    this.activeTurnRing = new Graphics();
+    this.activeTurnRing.circle(cx, cy, radius + 10);
+    this.activeTurnRing.stroke({ color: 0xffd43b, width: 4, alpha: 1 });
+    this.activeTurnRing.visible = false;
+    this.activeTurnRing.eventMode = 'none';
+    this.addChild(this.activeTurnRing);
 
     // Colored circle for the token — acts as the background/fallback when no iconUrl is set,
     // and as a visible border ring even when an image portrait is loaded on top.
@@ -195,9 +214,45 @@ export class TokenSprite extends Container {
     return this._token;
   }
 
+  private getAuraColor(): number {
+    const conditionColor = this._token.auraCondition
+      ? CONDITION_AURA_COLORS[this._token.auraCondition]
+      : null;
+    const color = conditionColor ?? this._token.auraColor ?? DEFAULT_AURA_COLOR;
+    return parseInt(color.replace('#', ''), 16);
+  }
+
+  private drawAura(): void {
+    this.auraLayer.clear();
+
+    const radiusCells = this._token.auraRadius ?? 0;
+    if (!this._token.auraVisible || radiusCells <= 0) return;
+
+    const tokenSize = this._token.size * this.cellSize;
+    const cx = tokenSize / 2;
+    const cy = tokenSize / 2;
+    const auraRadius = radiusCells * this.cellSize;
+    const color = this.getAuraColor();
+
+    this.auraLayer.circle(cx, cy, auraRadius);
+    this.auraLayer.fill({ color, alpha: AURA_FILL_ALPHA });
+    this.auraLayer.circle(cx, cy, auraRadius);
+    this.auraLayer.stroke({ color, width: AURA_STROKE_WIDTH, alpha: AURA_STROKE_ALPHA });
+  }
+
   /** Show or hide the selection ring around this token. */
   setSelected(selected: boolean): void {
     this.selectionRing.visible = selected;
+  }
+
+  /** Show or hide the active-turn ring around this token. */
+  setActiveTurn(active: boolean): void {
+    this.activeTurnRing.visible = active;
+  }
+
+  /** Returns the axis-aligned bounding box in parent (world) space for rubber-band selection. */
+  getTokenBounds(): { x: number; y: number; size: number } {
+    return { x: this.x, y: this.y, size: this._token.size * this.cellSize };
   }
 
   /** Update position on canvas from new token data (e.g. after server confirmation). */
@@ -220,6 +275,7 @@ export class TokenSprite extends Container {
       this.y = token.y * this.cellSize;
     }
     this.drawHpBar();
+    this.drawAura();
   }
 
   /** Redraw the HP bar based on current token hp/maxHp values. */
@@ -278,7 +334,7 @@ export class TokenSprite extends Container {
   private loadIconTexture(url: string, cx: number, cy: number, radius: number): void {
     Assets.load(url)
       .then((texture) => {
-        if (this.destroyed) return;
+        if (this._isDestroyed) return;
         const sprite = new Sprite(texture);
         // Fit the image inside the token circle (square of side 2*radius, centred at cx, cy)
         const diameter = radius * 2;
@@ -319,6 +375,9 @@ export class TokenSprite extends Container {
   }
 
   private handlePointerDown(event: FederatedPointerEvent): void {
+    if (event.button !== 0) return; // ignore middle/right mouse — MMB is reserved for map panning
+    // Stop bubbling so the stage's background-click handler doesn't misfire.
+    event.stopPropagation();
     this.isDragging = true;
     this.dragMoved = false;
     this.onDragStateChange?.(true);
@@ -483,7 +542,7 @@ export class TokenSprite extends Container {
   }
 
   override destroy(): void {
-    this.destroyed = true;
+    this._isDestroyed = true;
     // If destroyed mid-drag, ensure CanvasManager's dragging flag is cleared
     if (this.isDragging) {
       this.isDragging = false;

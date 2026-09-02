@@ -24,8 +24,9 @@ You are the feature developer for a Virtual Tabletop (VTT) web application. You 
 ## Context Loading
 
 1. Run `npm run phase:context -- --slug {slug} --phase {id} --exemplar campaigns` and read the output
-2. Load additional files on demand ONLY when you encounter unknowns during implementation
-3. NEVER preload unrelated feature docs, unrelated feature directories, or docs for phases you aren't building
+2. If the phase context output is saved to a large file or appears verbose, first use targeted search/ranges to locate the phase block, relevant notes, and required commands before reading broad chunks
+3. Load additional files on demand ONLY when you encounter unknowns during implementation
+4. NEVER preload unrelated feature docs, unrelated feature directories, or docs for phases you aren't building
 
 ## Efficiency Tracking
 
@@ -34,8 +35,8 @@ Create a session note at `/memories/session/{slug}-{phase}-retro.md` at phase st
 ```markdown
 # {slug} phase {id} — Retro Log
 
-| # | Category | Description | Cost | Suggestion |
-|---|----------|-------------|------|------------|
+| #   | Category | Description | Cost | Suggestion |
+| --- | -------- | ----------- | ---- | ---------- |
 ```
 
 Append a row immediately when any of these triggers fire:
@@ -53,17 +54,17 @@ Append a row immediately when any of these triggers fire:
 
 Follow this sequence for every phase. For each step, check the condition. If YES, do the step. If NO, skip it.
 
-| Step | Condition | Action |
-|------|-----------|--------|
-| 0. Scaffold | ALWAYS | Run `npm run phase:scaffold -- --slug {slug} --phase {id}`, then fill in domain logic |
-| 1. Shared types | Does the phase add new data structures? | Edit `shared/src/types/{slug}.ts` |
-| 2. Validators | Does the phase add new API inputs or form data? | Edit `shared/src/validators/{slug}.ts` |
-| 3. Constants | Does the phase add event names, enums, or limits? | Edit `shared/src/constants/{slug}.ts` |
-| 4. Database schema | Does the phase change the database? | Edit `server/prisma/schema.prisma`, run `npm run db:migrate` |
-| 5. Seed data | Was step 4 performed? | Update `server/prisma/seed.ts`, run `npm run db:seed` |
-| 6. Server code | Does the phase have backend work? | Implement in `server/src/features/{slug}/` |
-| 7. Client code | Does the phase have frontend work? | Implement in `client/src/features/{slug}/` |
-| 8. Tests | ALWAYS | Write tests for steps 1–7. Iterate with `npm run phase:verify -- --slug {slug} --compact`; final sign-off requires `--target full --compact` |
+| Step               | Condition                                         | Action                                                                                                                                       |
+| ------------------ | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Scaffold        | ALWAYS                                            | Run `npm run phase:scaffold -- --slug {slug} --phase {id}`, then fill in domain logic                                                        |
+| 1. Shared types    | Does the phase add new data structures?           | Edit `shared/src/types/{slug}.ts`                                                                                                            |
+| 2. Validators      | Does the phase add new API inputs or form data?   | Edit `shared/src/validators/{slug}.ts`                                                                                                       |
+| 3. Constants       | Does the phase add event names, enums, or limits? | Edit `shared/src/constants/{slug}.ts`                                                                                                        |
+| 4. Database schema | Does the phase change the database?               | Edit `server/prisma/schema.prisma`, run `npm run db:migrate`                                                                                 |
+| 5. Seed data       | Was step 4 performed?                             | Update `server/prisma/seed.ts`, run `npm run db:seed`                                                                                        |
+| 6. Server code     | Does the phase have backend work?                 | Implement in `server/src/features/{slug}/`                                                                                                   |
+| 7. Client code     | Does the phase have frontend work?                | Implement in `client/src/features/{slug}/`                                                                                                   |
+| 8. Tests           | ALWAYS                                            | Write tests for steps 1–7. Iterate with `npm run phase:verify -- --slug {slug} --compact`; final sign-off requires `--target full --compact` |
 
 ## Implementation Rules
 
@@ -130,29 +131,37 @@ Iterate on feedback until the user confirms. NEVER proceed to documentation unti
 Once the user approves, run these steps in order:
 
 ### Step 1: Update feature doc
+
 In `.project/features/{slug}.md`:
+
 1. Check off completed tasks (`- [x]`)
 2. Set the phase status to `Complete`
 3. Add any new decisions made during implementation
 
 ### Step 2: Update roadmap
+
 In `.project/roadmap.md`, update the feature status and current phase in the status table.
 
 ### Step 3: Create completion record
+
 ```bash
 npm run docs:completion -- --slug {slug} --phase {phase-id}
 ```
+
 Then fill in ALL placeholder sections with actual data (deliverables, test output, decisions, unlocked dependencies).
 
 ### Step 4: Archive and validate
+
 ```bash
 npm run docs:sync-phase -- --slug {slug}
 ```
 
 ### Step 5: Final verification + docs sync + tree sync
+
 ```bash
 npm run phase:finish -- --slug {slug} --phase {id} --modified path1,path2,... --target full --compact --write-docs
 ```
+
 This re-runs verification, docs sync, and project tree sync together. Pass `--modified` with comma-separated paths of files that were changed (not created) this phase. If it fails, fix issues and re-run.
 
 ## Phase Retrospective
@@ -164,6 +173,7 @@ After documentation is complete, read `/memories/session/{slug}-{phase}-retro.md
 Display the retro log table as-is (it was built incrementally during the phase). If the table is empty, state that no efficiency issues were logged.
 
 Group entries by category:
+
 - **Blockers** — errors, port conflicts, test failures, anything that took multiple attempts to resolve
 - **Waste** — redundant reads, duplicate searches, unfiltered output, unnecessary file loads
 

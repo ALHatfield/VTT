@@ -127,3 +127,21 @@ export async function hideFogByPolygon(
   await prisma.fogRegion.deleteMany({ where: { id: { in: idsToRemove } } });
   return idsToRemove;
 }
+
+export async function deleteFogRegion(
+  regionId: string,
+  sceneId: string,
+  campaignId: string,
+): Promise<void> {
+  await assertSceneBelongsToCampaign(sceneId, campaignId);
+
+  const region = await prisma.fogRegion.findFirst({
+    where: { id: regionId, sceneId, campaignId },
+  });
+
+  if (!region) {
+    throw new AppError(404, 'NOT_FOUND', 'Fog region not found');
+  }
+
+  await prisma.fogRegion.delete({ where: { id: regionId } });
+}

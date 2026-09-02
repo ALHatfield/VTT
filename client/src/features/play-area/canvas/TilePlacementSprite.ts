@@ -17,7 +17,12 @@ const MIN_TILE_SIZE = 16;
 
 export type TilePlacementMoveEndCallback = (placementId: string, x: number, y: number) => void;
 
-export type TilePlacementSelectCallback = (placementId: string | null) => void;
+/**
+ * Fired on a click (not a drag). CanvasManager owns selection state and decides
+ * whether the click adds to, removes from, or replaces the current selection.
+ * `additive` is true when Shift was held during the click.
+ */
+export type TilePlacementSelectCallback = (placementId: string, additive: boolean) => void;
 export type TilePlacementResizeEndCallback = (
   placementId: string,
   width: number,
@@ -38,20 +43,26 @@ const DRAG_THRESHOLD = 4;
  * TilePlacementSprite — a single placed tile on the canvas.
  *
  * Interactions (editor-mode only):
- *  - Click        → select (shows border + resize handle)
+ *  - Click        → select (shows border + resize handles)
  *  - Drag         → move with grid-snapping (hold Alt to bypass grid snap)
  *  - Drop         → fires onMoveEnd with final snapped coordinates
- *  - SE-handle drag → resize, snaps to nearest grid cell multiple
+ *  - SE-handle drag → resize corner, pixel-accurate (no grid snapping)
+ *  - Edge-handle drag → resize single axis; left/top also shift position
  *  - Right-click  → fires onContextMenu with screen coordinates
  */
 export class TilePlacementSprite extends Container {
   readonly placementId: string;
   private readonly tileSprite: Sprite;
   private readonly selectionBorder: Graphics;
-  private readonly resizeHandle: Graphics;
+  private readonly resizeHandle: Graphics; // SE corner
+  private readonly topHandle: Graphics;
+  private readonly rightHandle: Graphics;
+  private readonly bottomHandle: Graphics;
+  private readonly leftHandle: Graphics;
 
   private _selected = false;
   private canInteract = false;
+  private _locked = false;
 
   // Drag state
   private isDragging = false;
@@ -63,13 +74,23 @@ export class TilePlacementSprite extends Container {
   private originX = 0;
   private originY = 0;
   private altHeld = false;
+  private shiftHeld = false;
 
-  // Resize state
+  // Resize state (SE corner)
   private isResizing = false;
   private resizeStartMouseX = 0;
   private resizeStartMouseY = 0;
   private resizeStartWidth = 0;
   private resizeStartHeight = 0;
+
+  // Edge resize state (top / right / bottom / left handles)
+  private activeEdge: 'top' | 'right' | 'bottom' | 'left' | null = null;
+  private edgeStartMouseX = 0;
+  private edgeStartMouseY = 0;
+  private edgeStartX = 0;
+  private edgeStartY = 0;
+  private edgeStartWidth = 0;
+  private edgeStartHeight = 0;
 
   private cellSize: number;
 
@@ -117,6 +138,33 @@ export class TilePlacementSprite extends Container {
     this.resizeHandle.on('pointerdown', this.onResizePointerDown, this);
     this.addChild(this.resizeHandle);
 
+    // Edge handles (top / right / bottom / left) — single-axis resize
+    this.topHandle = new Graphics();
+    this.topHandle.visible = false;
+    this.topHandle.cursor = 'ns-resize';
+    this.topHandle.on('pointerdown', this.onTopEdgeDown, this);
+    this.addChild(this.topHandle);
+
+    this.rightHandle = new Graphics();
+    this.rightHandle.visible = false;
+    this.rightHandle.cursor = 'ew-resize';
+    this.rightHandle.on('pointerdown', this.onRightEdgeDown, this);
+    this.addChild(this.rightHandle);
+
+    this.bottomHandle = new Graphics();
+    this.bottomHandle.visible = false;
+    this.bottomHandle.cursor = 'ns-resize';
+    this.bottomHandle.on('pointerdown', this.onBottomEdgeDown, this);
+    this.addChild(this.bottomHandle);
+
+    this.leftHandle = new Graphics();
+    this.leftHandle.visible = false;
+    this.leftHandle.cursor = 'ew-resize';
+    this.leftHandle.on('pointerdown', this.onLeftEdgeDown, this);
+    this.addChild(this.leftHandle);
+
+    this.drawEdgeHandles(width, height);
+
     this.eventMode = 'none';
   }
 
@@ -131,8 +179,50 @@ export class TilePlacementSprite extends Container {
   setSelected(selected: boolean): void {
     this._selected = selected;
     this.selectionBorder.visible = selected;
-    // Only show resize handle when selected AND interactive (editor mode)
-    this.resizeHandle.visible = selected && this.canInteract;
+    const showHandles = selected && this.canInteract && !this._locked;
+    this.resizeHandle.visible = showHandles;
+    this.topHandle.visible = showHandles;
+    this.rightHandle.visible = showHandles;
+    this.bottomHandle.visible = showHandles;
+    this.leftHandle.visible = showHandles;
+  }
+
+  /**
+   * Lock or unlock this sprite. A locked sprite cannot be selected or moved,
+   * even when editor mode is active. Idempotent.
+   * Event listeners remain registered; `eventMode = 'none'` is enough to
+   * suppress them, so there is no need to detach/reattach on each toggle.
+   */
+  setLocked(locked: boolean): void {
+    if (this._locked === locked) return;
+    this._locked = locked;
+    if (this.canInteract) {
+      if (locked) {
+        this.eventMode = 'none';
+        this.cursor = 'default';
+        this.setAllHandlesEventMode('none');
+        this.setAllHandlesVisible(false);
+      } else {
+        this.eventMode = 'static';
+        this.cursor = 'grab';
+        this.setAllHandlesEventMode('static');
+        this.setAllHandlesVisible(this._selected);
+      }
+    }
+  }
+
+  /**
+   * Axis-aligned world-space bounds of the tile. Used by marquee selection to
+   * test which sprites fall inside the drag rectangle. Rotation is ignored —
+   * the reported bounds match the un-rotated sprite footprint.
+   */
+  getWorldBounds(): { x: number; y: number; width: number; height: number } {
+    return {
+      x: this.x,
+      y: this.y,
+      width: this.tileSprite.width,
+      height: this.tileSprite.height,
+    };
   }
 
   /**
@@ -145,23 +235,27 @@ export class TilePlacementSprite extends Container {
     this.drawSelectionBorder(width, height);
     this.resizeHandle.clear();
     this.drawResizeHandle(width, height);
-    // Keep the container's hit area in sync with the new tile bounds so
-    // click/drag still lands on the resized tile.
-    if (this.canInteract) this.updateHitArea();
+    this.drawEdgeHandles(width, height);
+    if (this.canInteract && !this.isResizing && !this.activeEdge) this.updateHitArea();
   }
 
   /**
    * Enable or disable pointer interaction.
    * In play mode all interactions are disabled; in editor mode they are enabled.
+   * When locked, event listeners are still registered but `eventMode = 'none'`
+   * prevents them from firing — this lets `setLocked(false)` restore interaction
+   * by simply flipping `eventMode` back to `'static'` without needing to
+   * re-register listeners.
    * Idempotent — calling with the same value twice has no effect.
    */
   setInteractive(interactive: boolean): void {
     if (this.canInteract === interactive) return;
     this.canInteract = interactive;
     if (interactive) {
-      this.eventMode = 'static';
-      this.cursor = 'grab';
-      this.resizeHandle.eventMode = 'static';
+      // Respect lock state for eventMode but always register listeners.
+      this.eventMode = this._locked ? 'none' : 'static';
+      this.cursor = this._locked ? 'default' : 'grab';
+      this.setAllHandlesEventMode(this._locked ? 'none' : 'static');
       // Explicit hit area — required in PixiJS v8 for a Container with no
       // interactive visible children to receive pointer events. Without this,
       // the tile renders but clicks pass through it.
@@ -174,7 +268,7 @@ export class TilePlacementSprite extends Container {
     } else {
       this.eventMode = 'none';
       this.cursor = 'default';
-      this.resizeHandle.eventMode = 'none';
+      this.setAllHandlesEventMode('none');
       this.hitArea = null;
       this.off('pointerdown', this.onPointerDown, this);
       this.off('globalpointermove', this.onPointerMove, this);
@@ -183,8 +277,9 @@ export class TilePlacementSprite extends Container {
       this.off('rightclick', this.onRightClick, this);
       this.stopDrag();
       this.stopResize();
-      // Hide resize handle when leaving editor mode
-      this.resizeHandle.visible = false;
+      this.stopEdgeDrag();
+      // Hide all handles when leaving editor mode
+      this.setAllHandlesVisible(false);
     }
   }
 
@@ -217,6 +312,41 @@ export class TilePlacementSprite extends Container {
     this.resizeHandle.hitArea = new Rectangle(-half, -half, RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
   }
 
+  private drawEdgeHandles(width: number, height: number): void {
+    this.drawSideHandle(this.topHandle, width / 2, 0);
+    this.drawSideHandle(this.rightHandle, width, height / 2);
+    this.drawSideHandle(this.bottomHandle, width / 2, height);
+    this.drawSideHandle(this.leftHandle, 0, height / 2);
+  }
+
+  private drawSideHandle(handle: Graphics, x: number, y: number): void {
+    const half = RESIZE_HANDLE_SIZE / 2;
+    handle.clear();
+    handle.rect(-half, -half, RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+    handle.fill({ color: RESIZE_HANDLE_COLOR, alpha: 1 });
+    handle.x = x;
+    handle.y = y;
+    handle.hitArea = new Rectangle(-half, -half, RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+  }
+
+  /** Apply the same eventMode to all 5 resize handles at once. */
+  private setAllHandlesEventMode(mode: 'static' | 'none'): void {
+    this.resizeHandle.eventMode = mode;
+    this.topHandle.eventMode = mode;
+    this.rightHandle.eventMode = mode;
+    this.bottomHandle.eventMode = mode;
+    this.leftHandle.eventMode = mode;
+  }
+
+  /** Show or hide all 5 resize handles at once. */
+  private setAllHandlesVisible(visible: boolean): void {
+    this.resizeHandle.visible = visible;
+    this.topHandle.visible = visible;
+    this.rightHandle.visible = visible;
+    this.bottomHandle.visible = visible;
+    this.leftHandle.visible = visible;
+  }
+
   private onRightClick(e: FederatedPointerEvent): void {
     if (!this.canInteract) return;
     e.stopPropagation();
@@ -226,9 +356,14 @@ export class TilePlacementSprite extends Container {
 
   private onPointerDown(e: FederatedPointerEvent): void {
     if (!this.canInteract) return;
+    if (e.button !== 0) return; // ignore middle/right mouse — MMB is reserved for map panning
+    // Stop bubbling so the stage's background-click handler only fires for genuine
+    // empty-canvas clicks (not tile clicks that happen to reach the stage root).
+    e.stopPropagation();
 
     this.pressedDown = true;
     this.altHeld = e.altKey;
+    this.shiftHeld = e.shiftKey;
     this.isDragging = false;
     this.dragMoved = false;
     this.dragStartX = e.globalX;
@@ -253,6 +388,9 @@ export class TilePlacementSprite extends Container {
     // stale dragStartX/Y would cause the tile to follow the cursor without a
     // mouse-down (the "stuck to the mouse" bug).
     if (!this.pressedDown) return;
+    // Only drag when already selected — pressing on an unselected tile is a
+    // click-to-select (handled in onPointerUp), not a drag.
+    if (!this._selected) return;
 
     const dx = e.globalX - this.dragStartX;
     const dy = e.globalY - this.dragStartY;
@@ -290,19 +428,15 @@ export class TilePlacementSprite extends Container {
 
     const wasDragging = this.isDragging;
     const wasDragMoved = this.dragMoved;
+    const wasShiftHeld = this.shiftHeld;
     this.stopDrag();
 
     if (wasDragging && wasDragMoved) {
       this.onMoveEnd?.(this.placementId, this.x, this.y);
     } else {
-      // Click — toggle selection
-      if (this._selected) {
-        this.setSelected(false);
-        this.onSelect?.(null);
-      } else {
-        this.setSelected(true);
-        this.onSelect?.(this.placementId);
-      }
+      // Click — CanvasManager owns selection state and will decide whether
+      // this click adds/removes/replaces the current selection.
+      this.onSelect?.(this.placementId, wasShiftHeld);
     }
   }
 
@@ -352,17 +486,11 @@ export class TilePlacementSprite extends Container {
     const rawWidth = this.resizeStartWidth + dx;
     const rawHeight = this.resizeStartHeight + dy;
 
-    // Snap new dimensions to nearest grid cell; enforce minimum size
-    const snappedWidth = Math.max(
-      MIN_TILE_SIZE,
-      Math.round(rawWidth / this.cellSize) * this.cellSize,
+    // No grid snapping on resize — pixel-accurate for fine-tuning
+    this.resize(
+      Math.max(MIN_TILE_SIZE, Math.round(rawWidth)),
+      Math.max(MIN_TILE_SIZE, Math.round(rawHeight)),
     );
-    const snappedHeight = Math.max(
-      MIN_TILE_SIZE,
-      Math.round(rawHeight / this.cellSize) * this.cellSize,
-    );
-
-    this.resize(snappedWidth, snappedHeight);
   };
 
   private readonly onResizePointerUp = (_e: FederatedPointerEvent): void => {
@@ -384,6 +512,88 @@ export class TilePlacementSprite extends Container {
     this.off('pointerupoutside', this.onResizePointerUp, this);
   }
 
+  // ---------------------------------------------------------------------------
+  // Edge handle drag (top / right / bottom / left)
+  // ---------------------------------------------------------------------------
+
+  private readonly onTopEdgeDown = (e: FederatedPointerEvent): void => this.startEdgeDrag('top', e);
+  private readonly onRightEdgeDown = (e: FederatedPointerEvent): void =>
+    this.startEdgeDrag('right', e);
+  private readonly onBottomEdgeDown = (e: FederatedPointerEvent): void =>
+    this.startEdgeDrag('bottom', e);
+  private readonly onLeftEdgeDown = (e: FederatedPointerEvent): void =>
+    this.startEdgeDrag('left', e);
+
+  private startEdgeDrag(edge: 'top' | 'right' | 'bottom' | 'left', e: FederatedPointerEvent): void {
+    if (!this.canInteract) return;
+    e.stopPropagation();
+    this.activeEdge = edge;
+    this.edgeStartMouseX = e.globalX;
+    this.edgeStartMouseY = e.globalY;
+    this.edgeStartX = this.x;
+    this.edgeStartY = this.y;
+    this.edgeStartWidth = this.tileSprite.width;
+    this.edgeStartHeight = this.tileSprite.height;
+    this.hitArea = new Rectangle(-10000, -10000, 20000, 20000);
+    this.on('pointermove', this.onEdgeResizeMove, this);
+    this.on('pointerup', this.onEdgeResizeUp, this);
+    this.on('pointerupoutside', this.onEdgeResizeUp, this);
+  }
+
+  private readonly onEdgeResizeMove = (e: FederatedPointerEvent): void => {
+    if (!this.activeEdge || !this.parent) return;
+    const scale = this.parent.worldTransform.a !== 0 ? this.parent.worldTransform.a : 1;
+    const dx = (e.globalX - this.edgeStartMouseX) / scale;
+    const dy = (e.globalY - this.edgeStartMouseY) / scale;
+
+    switch (this.activeEdge) {
+      case 'right':
+        this.resize(
+          Math.max(MIN_TILE_SIZE, Math.round(this.edgeStartWidth + dx)),
+          this.tileSprite.height,
+        );
+        break;
+      case 'bottom':
+        this.resize(
+          this.tileSprite.width,
+          Math.max(MIN_TILE_SIZE, Math.round(this.edgeStartHeight + dy)),
+        );
+        break;
+      case 'left': {
+        const newW = Math.max(MIN_TILE_SIZE, Math.round(this.edgeStartWidth - dx));
+        this.x = this.edgeStartX + this.edgeStartWidth - newW;
+        this.resize(newW, this.tileSprite.height);
+        break;
+      }
+      case 'top': {
+        const newH = Math.max(MIN_TILE_SIZE, Math.round(this.edgeStartHeight - dy));
+        this.y = this.edgeStartY + this.edgeStartHeight - newH;
+        this.resize(this.tileSprite.width, newH);
+        break;
+      }
+    }
+  };
+
+  private readonly onEdgeResizeUp = (_e: FederatedPointerEvent): void => {
+    if (!this.activeEdge) return;
+    const edge = this.activeEdge;
+    this.stopEdgeDrag();
+    this.onResizeEnd?.(this.placementId, this.tileSprite.width, this.tileSprite.height);
+    // Left/top handles also shift the tile's position
+    if (edge === 'left' || edge === 'top') {
+      this.onMoveEnd?.(this.placementId, this.x, this.y);
+    }
+  };
+
+  private stopEdgeDrag(): void {
+    this.activeEdge = null;
+    if (this.canInteract) this.updateHitArea();
+    else this.hitArea = null;
+    this.off('pointermove', this.onEdgeResizeMove, this);
+    this.off('pointerup', this.onEdgeResizeUp, this);
+    this.off('pointerupoutside', this.onEdgeResizeUp, this);
+  }
+
   override destroy(): void {
     this.off('pointerdown', this.onPointerDown, this);
     this.off('pointermove', this.onPointerMove, this);
@@ -391,10 +601,18 @@ export class TilePlacementSprite extends Container {
     this.off('pointerupoutside', this.onPointerUp, this);
     this.off('rightclick', this.onRightClick, this);
     this.resizeHandle.off('pointerdown', this.onResizePointerDown, this);
-    this.stopResize();
+    this.topHandle.off('pointerdown', this.onTopEdgeDown, this);
+    this.rightHandle.off('pointerdown', this.onRightEdgeDown, this);
+    this.bottomHandle.off('pointerdown', this.onBottomEdgeDown, this);
+    this.leftHandle.off('pointerdown', this.onLeftEdgeDown, this);
+    this.stopEdgeDrag();
     this.tileSprite.destroy();
     this.selectionBorder.destroy();
     this.resizeHandle.destroy();
+    this.topHandle.destroy();
+    this.rightHandle.destroy();
+    this.bottomHandle.destroy();
+    this.leftHandle.destroy();
     super.destroy();
   }
 }

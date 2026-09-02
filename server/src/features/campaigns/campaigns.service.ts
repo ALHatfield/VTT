@@ -1,4 +1,5 @@
 import type { Campaign, CampaignPlayer, CampaignRole } from '@vtt/shared';
+import { PLAYER_COLOR_PALETTE } from '@vtt/shared';
 import { prisma } from '../../shared/db/prisma.js';
 
 /**
@@ -27,22 +28,22 @@ function toCampaign(
 /**
  * Map a raw Prisma campaign_player + user to the shared CampaignPlayer type
  */
-function toCampaignPlayer(
-  raw: {
-    id: string;
-    campaignId: string;
-    userId: string;
-    role: string;
-    joinedAt: Date;
-    user: { username: string };
-  },
-): CampaignPlayer {
+function toCampaignPlayer(raw: {
+  id: string;
+  campaignId: string;
+  userId: string;
+  role: string;
+  color: string | null;
+  joinedAt: Date;
+  user: { username: string };
+}): CampaignPlayer {
   return {
     id: raw.id,
     campaignId: raw.campaignId,
     userId: raw.userId,
     role: raw.role as CampaignRole,
     username: raw.user.username,
+    color: raw.color,
     joinedAt: raw.joinedAt,
   };
 }
@@ -63,9 +64,9 @@ export async function listCampaignsForUser(userId: string): Promise<Campaign[]> 
 /**
  * Get a single campaign with its member list (caller must already be a member)
  */
-export async function getCampaignWithMembers(campaignId: string): Promise<
-  (Campaign & { members: CampaignPlayer[] }) | null
-> {
+export async function getCampaignWithMembers(
+  campaignId: string,
+): Promise<(Campaign & { members: CampaignPlayer[] }) | null> {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
     include: {
@@ -109,6 +110,7 @@ export async function createCampaign(
         create: {
           userId,
           role: 'dm',
+          color: PLAYER_COLOR_PALETTE[0],
         },
       },
     },
@@ -154,6 +156,12 @@ export interface InviteResult {
   invitedUsername: string;
 }
 
+/** Compute the next palette color for a new member based on current member count. */
+async function nextPaletteColor(campaignId: string): Promise<string> {
+  const memberCount = await prisma.campaignPlayer.count({ where: { campaignId } });
+  return PLAYER_COLOR_PALETTE[memberCount % PLAYER_COLOR_PALETTE.length];
+}
+
 /**
  * Invite a user by email to join a campaign with the specified role.
  * Returns the new CampaignPlayer record plus the invited user's ID and username
@@ -180,8 +188,10 @@ export async function inviteMember(
     throw err;
   }
 
+  const color = await nextPaletteColor(campaignId);
+
   const membership = await prisma.campaignPlayer.create({
-    data: { campaignId, userId: user.id, role },
+    data: { campaignId, userId: user.id, role, color },
     include: { user: true },
   });
 

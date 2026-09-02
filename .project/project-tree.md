@@ -48,6 +48,9 @@ VTT/
 │   │   │   ├── characters-6A.md         (NEW - Phase 6A)
 │   │   │   ├── editor-5A.1.md
 │   │   │   ├── editor-5A.md             (NEW - Phase 5A)
+│   │   │   ├── editor-5B.md
+│   │   │   ├── editor-5C.md
+│   │   │   ├── editor-5E.md
 │   │   │   ├── phase-0.md
 │   │   │   ├── play-area-4A.md
 │   │   │   ├── play-area-4B.1.md
@@ -57,8 +60,15 @@ VTT/
 │   │   │   ├── play-area-4E.md
 │   │   │   ├── play-area-4F.1.md        (NEW - Phase 4F.1)
 │   │   │   ├── play-area-4F.2.md
+│   │   │   ├── play-area-4F.3.md
+│   │   │   ├── play-area-4F.4.md
+│   │   │   ├── play-area-4F.5.md        (NEW - Phase 4F.5)
 │   │   │   ├── play-area-4F.md
 │   │   │   ├── play-area-4G.md
+│   │   │   ├── play-area-4H.md
+│   │   │   ├── play-area-4I.md          (NEW - Phase 4I)
+│   │   │   ├── play-area-4J.md
+│   │   │   ├── play-area-4K.md
 │   │   │   ├── portal-2A.md
 │   │   │   └── README.md
 │   │   └── features/
@@ -71,7 +81,9 @@ VTT/
 │   │       │   └── phase-6A.md          (NEW - Phase 6A)
 │   │       ├── editor/                  (NEW - Phase 5A)
 │   │       │   ├── phase-5A.1.md
-│   │       │   └── phase-5A.md          (NEW - Phase 5A)
+│   │       │   ├── phase-5A.md          (NEW - Phase 5A)
+│   │       │   ├── phase-5C.md
+│   │       │   └── phase-5E.md
 │   │       ├── play-area/
 │   │       │   ├── phase-4A.md
 │   │       │   ├── phase-4B.1.md
@@ -81,8 +93,15 @@ VTT/
 │   │       │   ├── phase-4E.md
 │   │       │   ├── phase-4F.1.md        (NEW - Phase 4F.1)
 │   │       │   ├── phase-4F.2.md
+│   │       │   ├── phase-4F.3.md
+│   │       │   ├── phase-4F.4.md
+│   │       │   ├── phase-4F.5.md
 │   │       │   ├── phase-4F.md
-│   │       │   └── phase-4G.md
+│   │       │   ├── phase-4G.md
+│   │       │   ├── phase-4H.md
+│   │       │   ├── phase-4I.md          (NEW - Phase 4I)
+│   │       │   ├── phase-4J.md
+│   │       │   └── phase-4K.md
 │   │       ├── portal/
 │   │       │   └── phase-2A.md
 │   │       └── README.md
@@ -95,7 +114,9 @@ VTT/
 │   │   └── portal.md                    (MODIFIED - Phase 2A)
 │   ├── handoffs/
 │   │   ├── editor-5B-builtin-assets.md
+│   │   ├── editor-5B-pathfinder-port.md
 │   │   ├── notes-and-handoffs-naming-convention.md
+│   │   ├── play-area-general-playground-asset-drops.md
 │   │   └── play-area-PM1-3d-dice-roller.md
 │   ├── notes/
 │   │   ├── editor-5A-editor-mode-integration.md (NEW - Phase 5A)
@@ -175,51 +196,92 @@ VTT/
 │   │   │   │   │   ├── AssetLibrary.tsx (NEW - Phase 5A)
 │   │   │   │   │   ├── AssetUploadZone.module.css (NEW - Phase 5A)
 │   │   │   │   │   ├── AssetUploadZone.tsx (NEW - Phase 5A)
+│   │   │   │   │   ├── GridAlignmentModal.module.css
+│   │   │   │   │   ├── GridAlignmentModal.tsx
 │   │   │   │   │   ├── LayersPanel.module.css (NEW - Phase 5A)
-│   │   │   │   │   └── LayersPanel.tsx  (NEW - Phase 5A)
+│   │   │   │   │   ├── LayersPanel.test.tsx
+│   │   │   │   │   ├── LayersPanel.tsx  (NEW - Phase 5A)
+│   │   │   │   │   ├── SmartSizingPrompt.module.css
+│   │   │   │   │   ├── SmartSizingPrompt.tsx
+│   │   │   │   │   ├── TileContextMenu.module.css
+│   │   │   │   │   ├── TileContextMenu.tsx
+│   │   │   │   │   ├── TileInspector.module.css
+│   │   │   │   │   ├── TileInspector.test.tsx
+│   │   │   │   │   └── TileInspector.tsx
 │   │   │   │   ├── hooks/               (NEW - Phase 5A)
 │   │   │   │   │   ├── useEditors.ts    (NEW - Phase 5A)
-│   │   │   │   │   └── useTileAssets.ts (NEW - Phase 5A)
+│   │   │   │   │   ├── useTileAssets.ts (NEW - Phase 5A)
+│   │   │   │   │   ├── useTileDragDrop.test.ts
+│   │   │   │   │   ├── useTileDragDrop.ts
+│   │   │   │   │   ├── useTilePlacements.test.ts
+│   │   │   │   │   ├── useTilePlacements.ts
+│   │   │   │   │   ├── useUndoRedo.test.ts
+│   │   │   │   │   └── useUndoRedo.ts
+│   │   │   │   ├── utils/
+│   │   │   │   │   ├── grid-alignment.test.ts
+│   │   │   │   │   └── grid-alignment.ts
 │   │   │   │   ├── EditorModeContext.test.tsx (NEW - Phase 5A)
 │   │   │   │   └── EditorModeContext.tsx (NEW - Phase 5A)
 │   │   │   ├── play-area/
 │   │   │   │   ├── canvas/
 │   │   │   │   │   ├── BackgroundLayer.ts (NEW - Phase 4A)
 │   │   │   │   │   ├── CanvasManager.test.ts (MODIFIED - Phase 4A, Phase 4B, Phase 4B.1)
-│   │   │   │   │   ├── CanvasManager.ts (MODIFIED - Phase 4A, Phase 4B, Phase 4B.1)
+│   │   │   │   │   ├── CanvasManager.ts (MODIFIED - Phase 4A, Phase 4B, Phase 4B.1, Phase 4F.5)
 │   │   │   │   │   ├── ForegroundLayer.test.ts
 │   │   │   │   │   ├── ForegroundLayer.ts (NEW - Phase 4A)
 │   │   │   │   │   ├── grid-utils.test.ts (NEW - Phase 4B)
 │   │   │   │   │   ├── grid-utils.ts    (NEW - Phase 4B)
 │   │   │   │   │   ├── PlaygroundLayer.ts (MODIFIED - Phase 4A, Phase 4B, Phase 4B.1, Phase 4C)
+│   │   │   │   │   ├── selection-utils.test.ts
+│   │   │   │   │   ├── selection-utils.ts
+│   │   │   │   │   ├── TilePlacementSprite.test.ts
+│   │   │   │   │   ├── TilePlacementSprite.ts
 │   │   │   │   │   ├── TokenSprite.test.ts (NEW - Phase 4B, MODIFIED - Phase 4B.1, Phase 4G)
 │   │   │   │   │   ├── TokenSprite.ts   (NEW - Phase 4B, MODIFIED - Phase 4B.1, Phase 4C)
 │   │   │   │   │   ├── viewport-culling.test.ts (NEW - Phase 4A)
 │   │   │   │   │   └── viewport-culling.ts (NEW - Phase 4A)
 │   │   │   │   ├── components/
+│   │   │   │   │   ├── CampaignToolbar.module.css
+│   │   │   │   │   ├── CampaignToolbar.tsx
+│   │   │   │   │   ├── CanvasToolbar.module.css (MODIFIED - Phase 4F.5)
+│   │   │   │   │   ├── CanvasToolbar.test.tsx (MODIFIED - Phase 4F.5)
+│   │   │   │   │   ├── CanvasToolbar.tsx (MODIFIED - Phase 4F.5)
 │   │   │   │   │   ├── ChatPanel.module.css (MODIFIED - Phase 4A, Phase 4D, Phase 4E)
 │   │   │   │   │   ├── ChatPanel.test.tsx (MODIFIED - Phase 4D, Phase 4E)
 │   │   │   │   │   ├── ChatPanel.tsx    (MODIFIED - Phase 4A, Phase 4D, Phase 4E)
 │   │   │   │   │   ├── DiceRollerButton.module.css (MODIFIED - Phase 4A, Phase 4E)
 │   │   │   │   │   ├── DiceRollerButton.tsx (MODIFIED - Phase 4A, Phase 4E)
-│   │   │   │   │   ├── PlayAreaToolbar.module.css (NEW - Phase 4A)
-│   │   │   │   │   ├── PlayAreaToolbar.tsx (NEW - Phase 4A)
 │   │   │   │   │   ├── TokenHoverCard.module.css (MODIFIED - Phase 4B, Phase 4E)
 │   │   │   │   │   ├── TokenHoverCard.test.tsx (NEW - Phase 4B, MODIFIED - Phase 4G)
-│   │   │   │   │   └── TokenHoverCard.tsx (MODIFIED - Phase 4B, Phase 4E, Phase 4G)
+│   │   │   │   │   ├── TokenHoverCard.tsx (MODIFIED - Phase 4B, Phase 4E, Phase 4G)
+│   │   │   │   │   ├── TurnTracker.module.css
+│   │   │   │   │   ├── TurnTracker.test.tsx (MODIFIED - Phase 4I)
+│   │   │   │   │   └── TurnTracker.tsx
 │   │   │   │   ├── hooks/
 │   │   │   │   │   ├── useActiveScene.ts (NEW - Phase 4B)
 │   │   │   │   │   ├── useCampaignRole.ts (NEW - Phase 4B)
 │   │   │   │   │   ├── useCanvas.ts     (NEW - Phase 4A)
 │   │   │   │   │   ├── useChatMessages.ts (NEW - Phase 4D)
+│   │   │   │   │   ├── useDrawTool.test.ts
+│   │   │   │   │   ├── useDrawTool.ts
 │   │   │   │   │   ├── useFogRegions.test.ts
 │   │   │   │   │   ├── useFogRegions.ts
+│   │   │   │   │   ├── useFogViewMode.test.ts
+│   │   │   │   │   ├── useFogViewMode.ts
+│   │   │   │   │   ├── useMeasureTool.test.ts
+│   │   │   │   │   ├── useMeasureTool.ts
+│   │   │   │   │   ├── useNpcDrop.test.ts (NEW - Phase 4F.5)
+│   │   │   │   │   ├── useNpcDrop.ts    (NEW - Phase 4F.5)
 │   │   │   │   │   ├── usePlayAreas.ts
 │   │   │   │   │   ├── usePlayAreaSocket.test.ts (MODIFIED - Phase 4C, Phase 4D)
 │   │   │   │   │   ├── usePlayAreaSocket.ts (MODIFIED - Phase 4C, Phase 4D, Phase 4E)
-│   │   │   │   │   └── useTokens.ts     (MODIFIED - Phase 4B, Phase 4C)
+│   │   │   │   │   ├── useTokens.ts     (MODIFIED - Phase 4B, Phase 4C)
+│   │   │   │   │   ├── useToolMode.test.ts
+│   │   │   │   │   ├── useToolMode.ts
+│   │   │   │   │   ├── vision-filter.test.ts
+│   │   │   │   │   └── vision-filter.ts
 │   │   │   │   ├── PlayArea.module.css  (NEW - Phase 4A)
-│   │   │   │   └── PlayArea.tsx         (MODIFIED - Phase 4A, Phase 4B, Phase 4B.1, Phase 4C, Phase 4D, Phase 4E)
+│   │   │   │   └── PlayArea.tsx         (MODIFIED - Phase 4A, Phase 4B, Phase 4B.1, Phase 4C, Phase 4D, Phase 4E, Phase 4F.5)
 │   │   │   └── portal/
 │   │   │       ├── Account.tsx          (NEW - Phase 2A)
 │   │   │       ├── CampaignsPlaceholder.tsx (NEW - Phase 2A)
@@ -251,36 +313,36 @@ VTT/
 │   │   ├── test-setup.ts                (MODIFIED - Phase 1A, Phase 4D)
 │   │   └── vite-env.d.ts
 │   ├── .DS_Store
-│   ├── dist
 │   ├── index.html
-│   ├── node_modules
 │   ├── package.json                     (MODIFIED - Phase 1A, Phase 4A, Phase 4C)
 │   ├── tsconfig.json
 │   ├── tsconfig.node.json
-│   ├── vite.config.ts
+│   ├── vite.config.ts                   (MODIFIED - Phase 4H)
 │   └── vitest.config.ts                 (MODIFIED - Phase 1A)
-├── image-seeds/
-│   ├── tile1.png
-│   ├── tile2.png
-│   ├── token1.png
-│   ├── token2.png
-│   ├── token3.png
-│   ├── token4.png
-│   ├── token5.png
-│   └── token6.png
 ├── memories/                            (NEW - Phase 5A)
 │   └── session/                         (NEW - Phase 5A)
-│       └── editor-5A-retro.md           (NEW - Phase 5A)
+│       ├── editor-5A-retro.md           (NEW - Phase 5A)
+│       ├── editor-5B-retro.md
+│       ├── editor-5C-retro.md
+│       ├── editor-5E-retro.md
+│       ├── play-area-4F.3-retro.md
+│       ├── play-area-4F.4-retro.md
+│       ├── play-area-4F.5-retro.md
+│       ├── play-area-4H-retro.md
+│       ├── play-area-4I-retro.md        (NEW - Phase 4I)
+│       ├── play-area-4J-retro.md
+│       └── play-area-4K-retro.md
 ├── scripts/
 │   ├── archive-feature-docs.mjs
 │   ├── docs-check.mjs
 │   ├── filter-test-results.mjs
 │   ├── phase-context.mjs
 │   ├── phase-scaffold.mjs
-│   ├── phase-workflow.mjs
+│   ├── phase-workflow.mjs               (MODIFIED - Phase 4H)
 │   ├── ports.mjs
 │   ├── project-graph.mjs
 │   ├── project-status.mjs
+│   ├── run-compact-tests.mjs            (NEW - Phase 4H)
 │   ├── scaffold-completion.mjs
 │   ├── slug-context.mjs
 │   ├── sync-architect.mjs
@@ -308,7 +370,14 @@ VTT/
 │   │   │   │   └── migration.sql        (NEW - Phase 5A)
 │   │   │   ├── 20260612183809_add_asset_source_and_nullable_campaign/
 │   │   │   │   └── migration.sql
+│   │   │   ├── 20260612221214_add_tile_placement_model/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260831213724_add_player_color/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260901000000_add_token_aura_fields/ (NEW - Phase 4I)
+│   │   │   │   └── migration.sql        (NEW - Phase 4I)
 │   │   │   └── migration_lock.toml      (NEW - Phase 1A)
+│   │   ├── reset-canvas.ts
 │   │   ├── schema.prisma                (MODIFIED - Phase 1A, Phase 3A, Phase 4B, Phase 4D, Phase 6A)
 │   │   └── seed.ts                      (MODIFIED - Phase 1A, Phase 3A, Phase 4B, Phase 4G, Phase 6A)
 │   ├── src/
@@ -339,9 +408,11 @@ VTT/
 │   │   │       ├── fog.routes.test.ts
 │   │   │       ├── fog.routes.ts
 │   │   │       ├── fog.service.ts
+│   │   │       ├── initiative.service.test.ts
+│   │   │       ├── initiative.service.ts
 │   │   │       ├── messages.routes.test.ts (NEW - Phase 4D)
 │   │   │       ├── messages.routes.ts   (NEW - Phase 4D)
-│   │   │       ├── play-area.routes.test.ts
+│   │   │       ├── play-area.routes.test.ts (MODIFIED - Phase 4I)
 │   │   │       ├── play-area.routes.ts
 │   │   │       ├── play-area.service.ts
 │   │   │       ├── play-area.socket.test.ts (MODIFIED - Phase 4C, Phase 4D)
@@ -371,16 +442,12 @@ VTT/
 │   │   ├── app.ts                       (MODIFIED - Phase 1A, Phase 3A, Phase 4B, Phase 4C, Phase 4D, Phase 6A)
 │   │   └── test-setup.ts                (NEW - Phase 4C)
 │   ├── uploads/                         (NEW - Phase 5A)
-│   │   ├── assets/                      (NEW - Phase 5A)
-│   │   │   └── 0e71c153-239d-4baa-8f06-696b99ac4c47.png
-│   │   └── thumbnails/                  (NEW - Phase 5A)
-│   │       └── thumb_0e71c153-239d-4baa-8f06-696b99ac4c47.png
+│   │   ├── assets                       (NEW - Phase 5A)
+│   │   └── thumbnails                   (NEW - Phase 5A)
 │   ├── .DS_Store
 │   ├── .env
 │   ├── .env.example
 │   ├── .env.local
-│   ├── dist
-│   ├── node_modules
 │   ├── package.json                     (MODIFIED - Phase 1A, Phase 4C)
 │   ├── tsconfig.json                    (MODIFIED - Phase 5A)
 │   └── vitest.config.ts                 (MODIFIED - Phase 3B, Phase 4C)
@@ -408,7 +475,7 @@ VTT/
 │   │   │   ├── editor.test.ts           (NEW - Phase 5A)
 │   │   │   ├── editor.ts                (NEW - Phase 5A)
 │   │   │   ├── index.ts                 (MODIFIED - Phase 1A, Phase 3A, Phase 4B, Phase 6A)
-│   │   │   ├── play-area.test.ts
+│   │   │   ├── play-area.test.ts        (MODIFIED - Phase 4H)
 │   │   │   └── play-area.ts             (MODIFIED - Phase 4B, Phase 4C, Phase 4D, Phase 4E)
 │   │   └── index.ts
 │   ├── package.json
@@ -420,11 +487,9 @@ VTT/
 │   └── thumbnails                       (NEW - Phase 5A)
 ├── .copilotignore
 ├── .DS_Store
-├── .git
 ├── .gitignore                           (NEW - Phase 0)
 ├── .prettierrc                          (NEW - Phase 0)
 ├── eslint.config.js                     (NEW - Phase 0)
-├── node_modules
 ├── package.json                         (NEW - Phase 0)
 ├── README.md
 ├── vitest.config.ts                     (MODIFIED - Phase 0, Phase 4C)

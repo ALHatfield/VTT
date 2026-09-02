@@ -60,13 +60,17 @@ function run(command) {
 
 function getPidsForPortWindows(port) {
   try {
-    const output = run(`netstat -ano -p tcp | findstr :${port}`);
+    const output = run(`netstat -ano -p tcp`);
 
     const pids = output
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0)
       .filter((line) => /LISTENING/i.test(line))
+      .filter((line) => {
+        const localAddr = line.split(/\s+/)[1] ?? '';
+        return localAddr.endsWith(`:${port}`);
+      })
       .map((line) => line.split(/\s+/).pop())
       .filter((pid) => Boolean(pid));
 

@@ -1,4 +1,12 @@
-import type { CampaignRole, NpcSubtype, Scene, Token, TokenType } from '@vtt/shared';
+import type {
+  AuraCondition,
+  AuraType,
+  CampaignRole,
+  NpcSubtype,
+  Scene,
+  Token,
+  TokenType,
+} from '@vtt/shared';
 import { DEFAULT_TOKEN_COLOR, DEFAULT_TOKEN_SIZE, DEFAULT_VISION_RADIUS } from '@vtt/shared';
 
 import { prisma } from '../../shared/db/prisma.js';
@@ -46,6 +54,11 @@ function toToken(raw: {
   maxHp: number | null;
   ac: number | null;
   visionRadius: number;
+  auraRadius: number | null;
+  auraColor: string | null;
+  auraVisible: boolean;
+  auraType: string | null;
+  auraCondition: string | null;
   npcSubtype: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -68,6 +81,11 @@ function toToken(raw: {
     maxHp: raw.maxHp,
     ac: raw.ac,
     visionRadius: raw.visionRadius,
+    auraRadius: raw.auraRadius,
+    auraColor: raw.auraColor,
+    auraVisible: raw.auraVisible,
+    auraType: (raw.auraType as AuraType | null) ?? null,
+    auraCondition: (raw.auraCondition as AuraCondition | null) ?? null,
     npcSubtype: (raw.npcSubtype as NpcSubtype | null) ?? null,
     createdAt: raw.createdAt.toISOString(),
     updatedAt: raw.updatedAt.toISOString(),
@@ -177,6 +195,11 @@ export async function createToken(
     ac?: number;
     ownerId?: string;
     visionRadius?: number;
+    auraRadius?: number;
+    auraColor?: string;
+    auraVisible?: boolean;
+    auraType?: string;
+    auraCondition?: string | null;
     npcSubtype?: string;
   },
 ): Promise<Token> {
@@ -211,6 +234,11 @@ export async function createToken(
       maxHp: data.maxHp ?? null,
       ac: data.ac ?? null,
       visionRadius: data.visionRadius ?? DEFAULT_VISION_RADIUS,
+      auraRadius: data.auraRadius ?? null,
+      auraColor: data.auraColor ?? null,
+      auraVisible: data.auraVisible ?? false,
+      auraType: data.auraType ?? null,
+      auraCondition: data.auraCondition ?? null,
       ownerId: data.ownerId ?? null,
       npcSubtype: (data.npcSubtype as NpcSubtype | undefined) ?? null,
     },
@@ -238,6 +266,11 @@ export async function updateToken(
     maxHp?: number | null;
     ac?: number | null;
     visionRadius?: number;
+    auraRadius?: number | null;
+    auraColor?: string | null;
+    auraVisible?: boolean;
+    auraType?: string | null;
+    auraCondition?: string | null;
     npcSubtype?: string | null;
   },
   userId: string,
@@ -262,6 +295,16 @@ export async function updateToken(
     throw new AppError(403, 'FORBIDDEN', "Only the DM can change a token's NPC subtype");
   }
 
+  const hasAuraChange =
+    data.auraRadius !== undefined ||
+    data.auraColor !== undefined ||
+    data.auraVisible !== undefined ||
+    data.auraType !== undefined ||
+    data.auraCondition !== undefined;
+  if (userRole !== 'dm' && hasAuraChange) {
+    throw new AppError(403, 'FORBIDDEN', "Only the DM can change a token's aura");
+  }
+
   const updated = await prisma.token.update({
     where: { id: tokenId },
     data: {
@@ -274,6 +317,11 @@ export async function updateToken(
       ...(data.maxHp !== undefined && { maxHp: data.maxHp }),
       ...(data.ac !== undefined && { ac: data.ac }),
       ...(data.visionRadius !== undefined && { visionRadius: data.visionRadius }),
+      ...(data.auraRadius !== undefined && { auraRadius: data.auraRadius }),
+      ...(data.auraColor !== undefined && { auraColor: data.auraColor }),
+      ...(data.auraVisible !== undefined && { auraVisible: data.auraVisible }),
+      ...(data.auraType !== undefined && { auraType: data.auraType }),
+      ...(data.auraCondition !== undefined && { auraCondition: data.auraCondition }),
       ...(data.npcSubtype !== undefined && { npcSubtype: data.npcSubtype as NpcSubtype | null }),
     },
     include: { owner: { select: { username: true } } },

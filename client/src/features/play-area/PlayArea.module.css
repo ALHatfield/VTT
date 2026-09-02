@@ -29,7 +29,49 @@
   display: block;
 }
 
+.rightRail {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rightRail > :last-child {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+}
+
 .fogDrawOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  cursor: crosshair;
+}
+
+/* Pan tool overlay — captures left-click-drag for viewport panning */
+.panOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  cursor: grab;
+}
+
+.panOverlay:active {
+  cursor: grabbing;
+}
+
+/* Measure tool overlay — captures pointer events for measurement (Phase 4J) */
+.measureOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  cursor: crosshair;
+}
+
+/* Draw tool overlay — captures pointer events for freehand/shape drawing (Phase 4K) */
+.drawOverlay {
   position: absolute;
   inset: 0;
   z-index: 8;
@@ -55,4 +97,37 @@
   left: 20px;
   z-index: 10;
   pointer-events: all;
+}
+
+/* Zoom buttons — floating top-right of canvas */
+.zoomButtons {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: all;
+}
+
+.zoomBtn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(22, 33, 62, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 1.1rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+  line-height: 1;
+}
+
+.zoomBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
 }

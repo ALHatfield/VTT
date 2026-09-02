@@ -3,8 +3,13 @@ import gsap from 'gsap';
 import type { ReactElement, RefObject } from 'react';
 import { useRef, useState } from 'react';
 
-import type { Token } from '@vtt/shared';
-import { VISION_RADIUS_MAX } from '@vtt/shared';
+import type { AuraCondition, AuraType, Token, TokenUpdatePayload } from '@vtt/shared';
+import {
+  AURA_RADIUS_MAX,
+  CONDITION_AURA_COLORS,
+  PRESET_AURA_TEMPLATES,
+  VISION_RADIUS_MAX,
+} from '@vtt/shared';
 
 import styles from './TokenHoverCard.module.css';
 
@@ -29,6 +34,18 @@ const TOKEN_TYPE_LABELS: Record<string, string> = {
   misc: 'Misc',
 };
 
+const AURA_TYPE_LABELS: Record<AuraType, string> = {
+  presence: 'Presence',
+  turn: 'Turn',
+  condition: 'Condition',
+};
+
+const AURA_CONDITION_LABELS: Record<AuraCondition, string> = {
+  stunned: 'Stunned',
+  poisoned: 'Poisoned',
+  blessed: 'Blessed',
+};
+
 interface TokenHoverCardProps {
   token: Token;
   canvasX: number;
@@ -42,6 +59,7 @@ interface TokenHoverCardProps {
   onClose: () => void;
   onHPChange: (tokenId: string, hp: number) => void;
   onVisionRadiusChange?: (tokenId: string, radius: number) => void;
+  onAuraChange?: (tokenId: string, payload: TokenUpdatePayload) => void;
   onQuickRoll?: (formula: string) => void;
   canvasWrapperRef: RefObject<HTMLDivElement>;
 }
@@ -57,6 +75,7 @@ export function TokenHoverCard({
   onClose,
   onHPChange,
   onVisionRadiusChange,
+  onAuraChange,
   onQuickRoll,
   canvasWrapperRef,
 }: TokenHoverCardProps): ReactElement {
@@ -64,9 +83,12 @@ export function TokenHoverCard({
   const [editingHP, setEditingHP] = useState<string | null>(null);
   const [editingVisionRadius, setEditingVisionRadius] = useState<string | null>(null);
 
-  useGSAP(() => {
-    gsap.from(cardRef.current, { y: -8, opacity: 0, duration: 0.2, ease: 'power2.out' });
-  }, { scope: cardRef });
+  useGSAP(
+    () => {
+      gsap.from(cardRef.current, { y: -8, opacity: 0, duration: 0.2, ease: 'power2.out' });
+    },
+    { scope: cardRef },
+  );
 
   // Compute card position and pointer direction
   const wrapperW = canvasWrapperRef.current?.clientWidth ?? 800;
@@ -130,6 +152,10 @@ export function TokenHoverCard({
       onVisionRadiusChange?.(token.id, value);
     }
     setEditingVisionRadius(null);
+  }
+
+  function updateAura(payload: TokenUpdatePayload): void {
+    onAuraChange?.(token.id, payload);
   }
 
   const canEdit = canEditHP && isSelected;
@@ -252,6 +278,121 @@ export function TokenHoverCard({
               {token.visionRadius}
             </span>
           )}
+        </div>
+      )}
+
+      {canEditVisionRadius && isSelected && (
+        <div className={styles.auraSection}>
+          <div className={styles.auraHeader}>
+            <span className={styles.statLabel}>Aura</span>
+            <label className={styles.toggleLabel}>
+              <input
+                type="checkbox"
+                checked={token.auraVisible}
+                onChange={(e) =>
+                  updateAura({
+                    auraVisible: e.target.checked,
+                    auraRadius: token.auraRadius ?? 2,
+                    auraColor: token.auraColor ?? PRESET_AURA_TEMPLATES.auraOfProtection.color,
+                    auraType: token.auraType ?? 'presence',
+                  })
+                }
+              />
+              <span>On</span>
+            </label>
+          </div>
+          <div className={styles.presetRow}>
+            {Object.entries(PRESET_AURA_TEMPLATES).map(([key, preset]) => (
+              <button
+                key={key}
+                className={styles.presetButton}
+                type="button"
+                onClick={() =>
+                  updateAura({
+                    auraVisible: true,
+                    auraRadius: preset.radius,
+                    auraColor: preset.color,
+                    auraType: preset.type,
+                    auraCondition: null,
+                  })
+                }
+              >
+                {key === 'auraOfProtection'
+                  ? 'Protection'
+                  : key === 'healingAura'
+                    ? 'Healing'
+                    : 'Danger'}
+              </button>
+            ))}
+          </div>
+          <div className={styles.auraGrid}>
+            <label className={styles.fieldLabel}>
+              <span>Radius</span>
+              <input
+                className={styles.compactInput}
+                type="number"
+                min={0}
+                max={AURA_RADIUS_MAX}
+                value={token.auraRadius ?? 0}
+                onChange={(e) => updateAura({ auraRadius: parseInt(e.target.value, 10) || 0 })}
+              />
+            </label>
+            <label className={styles.fieldLabel}>
+              <span>Color</span>
+              <input
+                className={styles.colorInput}
+                type="color"
+                value={token.auraColor ?? PRESET_AURA_TEMPLATES.auraOfProtection.color}
+                onChange={(e) => updateAura({ auraColor: e.target.value })}
+              />
+            </label>
+            <label className={styles.fieldLabel}>
+              <span>Type</span>
+              <select
+                className={styles.compactSelect}
+                value={token.auraType ?? 'presence'}
+                onChange={(e) =>
+                  updateAura({
+                    auraType: e.target.value as AuraType,
+                    auraCondition:
+                      e.target.value === 'condition' ? (token.auraCondition ?? 'stunned') : null,
+                    auraColor:
+                      e.target.value === 'condition'
+                        ? CONDITION_AURA_COLORS[token.auraCondition ?? 'stunned']
+                        : token.auraColor,
+                  })
+                }
+              >
+                {Object.entries(AURA_TYPE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {token.auraType === 'condition' && (
+              <label className={styles.fieldLabel}>
+                <span>Status</span>
+                <select
+                  className={styles.compactSelect}
+                  value={token.auraCondition ?? 'stunned'}
+                  onChange={(e) => {
+                    const condition = e.target.value as AuraCondition;
+                    updateAura({
+                      auraCondition: condition,
+                      auraColor: CONDITION_AURA_COLORS[condition],
+                    });
+                  }}
+                >
+                  {Object.entries(AURA_CONDITION_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
         </div>
       )}
 
