@@ -129,11 +129,13 @@ erDiagram
     Campaign ||--o{ Token : "tokens"
     Campaign ||--o{ CampaignMessage : "messages"
     Campaign ||--o{ FogRegion : "fogRegions"
+    Campaign ||--o{ FogExploration : "fogExploration"
     Campaign ||--o{ Character : "characters"
     Campaign ||--o{ TileAsset : "tileAssets"
     Campaign ||--o{ TilePlacement : "tilePlacements"
     Scene ||--o{ Token : "tokens"
     Scene ||--o{ FogRegion : "fogRegions"
+    Scene ||--o{ FogExploration : "fogExploration"
     Scene ||--o{ TilePlacement : "tilePlacements"
     TileAsset ||--o{ TilePlacement : "placements"
 
@@ -178,6 +180,7 @@ erDiagram
         int height
         int cellSize
         bool isActive
+        json fogConfig
         datetime createdAt
         datetime updatedAt
     }
@@ -227,6 +230,17 @@ erDiagram
         json vertices
         datetime createdAt
         datetime updatedAt
+    }
+
+    FogExploration {
+        uuid id PK
+        uuid campaignId FK
+        uuid sceneId FK
+        string cellKey
+        float x
+        float y
+        float radius
+        datetime createdAt
     }
 
     Character {

@@ -68,6 +68,7 @@ model Campaign {
   tokens     Token[]
   messages   CampaignMessage[]
   fogRegions FogRegion[]
+  fogExploration FogExploration[]
   characters Character[]
   tileAssets TileAsset[]
   tilePlacements TilePlacement[]
@@ -123,12 +124,15 @@ model Scene {
   height     Int      @default(2048)
   cellSize   Int      @default(64) @map("cell_size")
   isActive   Boolean  @default(false) @map("is_active")
+  /// PM2 fog mask configuration; null falls back to DEFAULT_FOG_MASK_CONFIG.
+  fogConfig  Json?    @map("fog_config")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   tokens   Token[]
   fogRegions FogRegion[]
+  fogExploration FogExploration[]
   tilePlacements TilePlacement[]
 
   @@index([campaignId])
@@ -220,6 +224,27 @@ model FogRegion {
 
   @@index([campaignId, sceneId])
   @@map("fog_regions")
+}
+
+/// A persisted explored area on a scene (Phase PM2).
+/// Deduplicated per scene by a quantized grid cell key so movement does not
+/// grow the table without bound.
+model FogExploration {
+  id         String   @id @default(uuid())
+  campaignId String   @map("campaign_id")
+  sceneId    String   @map("scene_id")
+  cellKey    String   @map("cell_key")
+  x          Float
+  y          Float
+  radius     Float
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scene    Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@unique([sceneId, cellKey])
+  @@index([campaignId, sceneId])
+  @@map("fog_exploration")
 }
 
 // ---------------------------------------------------------------------------

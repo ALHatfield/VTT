@@ -39,6 +39,10 @@ vi.mock('pixi.js', () => {
       return child;
     }
 
+    removeChildren(): MockContainer[] {
+      return this.children.splice(0, this.children.length);
+    }
+
     on(event: string, handler: (...args: unknown[]) => void, context?: unknown): this {
       const bound = context !== undefined ? handler.bind(context) : handler;
       (this._listeners[event] ??= []).push(bound);
@@ -95,6 +99,29 @@ vi.mock('pixi.js', () => {
     constructor(_opts?: { alpha?: number }) {}
   }
 
+  class MockBlurFilter {
+    strength: number;
+    constructor(opts: { strength: number }) {
+      this.strength = opts.strength;
+    }
+    destroy(): void {
+      /* noop */
+    }
+  }
+
+  class MockRenderTexture {
+    constructor(
+      public width = 0,
+      public height = 0,
+    ) {}
+    static create(opts: { width: number; height: number }): MockRenderTexture {
+      return new MockRenderTexture(opts.width, opts.height);
+    }
+    destroy(): void {
+      /* noop */
+    }
+  }
+
   return {
     Application: vi.fn(() => new MockApplication()),
     Container: MockContainer,
@@ -110,6 +137,8 @@ vi.mock('pixi.js', () => {
     },
     Assets: { load: vi.fn().mockResolvedValue({}) },
     AlphaFilter: MockAlphaFilter,
+    BlurFilter: MockBlurFilter,
+    RenderTexture: MockRenderTexture,
   };
 });
 

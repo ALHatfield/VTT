@@ -406,6 +406,70 @@ export interface FogRegionDeletedPayload {
 }
 
 // ---------------------------------------------------------------------------
+// Fog mask pipeline types (Phase PM2)
+// ---------------------------------------------------------------------------
+
+/** Which fog renderer a scene uses. `legacy` is the Phase 4F polygon path. */
+export type FogMode = 'legacy' | 'pm2';
+
+/** Whether previously seen areas stay revealed as a dimmed shroud. */
+export type ExplorationMode = 'off' | 'persistent';
+
+/** How reveal boundaries are feathered. `off` is the cheapest mode. */
+export type FogEdgeSoftness = 'off' | 'radial' | 'filter';
+
+/** Per-pixel fog state produced by composing the active and explored masks. */
+export type FogVisibilityState = 'active' | 'explored' | 'hidden';
+
+/** Scene-level configuration for the PM2 RenderTexture mask pipeline. */
+export interface FogMaskConfig {
+  fogMode: FogMode;
+  explorationMode: ExplorationMode;
+  edgeSoftness: FogEdgeSoftness;
+  /** Downscale factor applied to the mask RenderTexture relative to map size. */
+  maskResolutionScale: number;
+  /** Opacity of explored-but-not-currently-visible areas. */
+  shroudAlpha: number;
+  /** Additional opacity applied to areas that have never been explored. */
+  hiddenAlpha: number;
+  /** Fraction of a stamp radius used for the soft falloff edge. */
+  edgeSoftnessRatio: number;
+}
+
+/** A circular reveal emitter stamped into the fog mask, in world pixel space. */
+export interface VisionStamp {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+}
+
+/** A persisted explored area for a scene. */
+export interface FogExplorationStamp extends VisionStamp {
+  sceneId: string;
+  campaignId: string;
+}
+
+/** Server broadcast after scene fog configuration changes. */
+export interface FogConfigUpdatedPayload {
+  campaignId: string;
+  sceneId: string;
+  config: FogMaskConfig;
+}
+
+/**
+ * Server broadcast carrying explored areas for a scene.
+ * `append` merges a newly discovered delta; `replace` swaps the whole set
+ * (used when the DM resets exploration).
+ */
+export interface FogExplorationSyncPayload {
+  campaignId: string;
+  sceneId: string;
+  mode: 'append' | 'replace';
+  stamps: FogExplorationStamp[];
+}
+
+// ---------------------------------------------------------------------------
 // Scene types (Phase 4B)
 // ---------------------------------------------------------------------------
 

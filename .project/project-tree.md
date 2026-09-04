@@ -69,6 +69,7 @@ VTT/
 │   │   │   ├── play-area-4I.md          (NEW - Phase 4I)
 │   │   │   ├── play-area-4J.md
 │   │   │   ├── play-area-4K.md
+│   │   │   ├── play-area-PM2.md         (NEW - Phase PM2)
 │   │   │   ├── portal-2A.md
 │   │   │   └── README.md
 │   │   └── features/
@@ -101,7 +102,8 @@ VTT/
 │   │       │   ├── phase-4H.md
 │   │       │   ├── phase-4I.md          (NEW - Phase 4I)
 │   │       │   ├── phase-4J.md
-│   │       │   └── phase-4K.md
+│   │       │   ├── phase-4K.md
+│   │       │   └── phase-PM2.md         (NEW - Phase PM2)
 │   │       ├── portal/
 │   │       │   └── phase-2A.md
 │   │       └── README.md
@@ -127,6 +129,7 @@ VTT/
 │   │   ├── play-area-general-pixiejs-canvas-notes.md
 │   │   ├── play-area-general-pixijs-v8.md
 │   │   ├── play-area-general-seed-scene-idempotency.md
+│   │   ├── play-area-PM2-fog-benchmark.md (NEW - Phase PM2)
 │   │   ├── play-area-PM2-fog-rendering.md
 │   │   ├── play-area-PM3-line-of-sight.md
 │   │   ├── play-area-PM4-lighting-effects.md
@@ -224,9 +227,15 @@ VTT/
 │   │   │   │   └── EditorModeContext.tsx (NEW - Phase 5A)
 │   │   │   ├── play-area/
 │   │   │   │   ├── canvas/
+│   │   │   │   │   ├── fog/             (NEW - Phase PM2)
+│   │   │   │   │   │   ├── fog-mask-math.test.ts (NEW - Phase PM2)
+│   │   │   │   │   │   ├── fog-mask-math.ts (NEW - Phase PM2)
+│   │   │   │   │   │   ├── FogMaskService.test.ts (NEW - Phase PM2)
+│   │   │   │   │   │   └── FogMaskService.ts (NEW - Phase PM2)
 │   │   │   │   │   ├── BackgroundLayer.ts (NEW - Phase 4A)
 │   │   │   │   │   ├── CanvasManager.test.ts (MODIFIED - Phase 4A, Phase 4B, Phase 4B.1)
 │   │   │   │   │   ├── CanvasManager.ts (MODIFIED - Phase 4A, Phase 4B, Phase 4B.1, Phase 4F.5)
+│   │   │   │   │   ├── ForegroundLayer.pm2.test.ts (NEW - Phase PM2)
 │   │   │   │   │   ├── ForegroundLayer.test.ts
 │   │   │   │   │   ├── ForegroundLayer.ts (NEW - Phase 4A)
 │   │   │   │   │   ├── grid-utils.test.ts (NEW - Phase 4B)
@@ -251,6 +260,8 @@ VTT/
 │   │   │   │   │   ├── ChatPanel.tsx    (MODIFIED - Phase 4A, Phase 4D, Phase 4E)
 │   │   │   │   │   ├── DiceRollerButton.module.css (MODIFIED - Phase 4A, Phase 4E)
 │   │   │   │   │   ├── DiceRollerButton.tsx (MODIFIED - Phase 4A, Phase 4E)
+│   │   │   │   │   ├── FogSettingsPanel.module.css (NEW - Phase PM2)
+│   │   │   │   │   ├── FogSettingsPanel.tsx (NEW - Phase PM2)
 │   │   │   │   │   ├── TokenHoverCard.module.css (MODIFIED - Phase 4B, Phase 4E)
 │   │   │   │   │   ├── TokenHoverCard.test.tsx (NEW - Phase 4B, MODIFIED - Phase 4G)
 │   │   │   │   │   ├── TokenHoverCard.tsx (MODIFIED - Phase 4B, Phase 4E, Phase 4G)
@@ -264,6 +275,10 @@ VTT/
 │   │   │   │   │   ├── useChatMessages.ts (NEW - Phase 4D)
 │   │   │   │   │   ├── useDrawTool.test.ts
 │   │   │   │   │   ├── useDrawTool.ts
+│   │   │   │   │   ├── useFogConfig.test.ts (NEW - Phase PM2)
+│   │   │   │   │   ├── useFogConfig.ts  (NEW - Phase PM2)
+│   │   │   │   │   ├── useFogExploration.test.ts (NEW - Phase PM2)
+│   │   │   │   │   ├── useFogExploration.ts (NEW - Phase PM2)
 │   │   │   │   │   ├── useFogRegions.test.ts
 │   │   │   │   │   ├── useFogRegions.ts
 │   │   │   │   │   ├── useFogViewMode.test.ts
@@ -331,7 +346,8 @@ VTT/
 │       ├── play-area-4H-retro.md
 │       ├── play-area-4I-retro.md        (NEW - Phase 4I)
 │       ├── play-area-4J-retro.md
-│       └── play-area-4K-retro.md
+│       ├── play-area-4K-retro.md
+│       └── play-area-PM2-retro.md       (NEW - Phase PM2)
 ├── scripts/
 │   ├── archive-feature-docs.mjs
 │   ├── docs-check.mjs
@@ -376,6 +392,8 @@ VTT/
 │   │   │   │   └── migration.sql
 │   │   │   ├── 20260901000000_add_token_aura_fields/ (NEW - Phase 4I)
 │   │   │   │   └── migration.sql        (NEW - Phase 4I)
+│   │   │   ├── 20260904042202_add_fog_mask_config_and_exploration/ (NEW - Phase PM2)
+│   │   │   │   └── migration.sql        (NEW - Phase PM2)
 │   │   │   └── migration_lock.toml      (NEW - Phase 1A)
 │   │   ├── reset-canvas.ts
 │   │   ├── schema.prisma                (MODIFIED - Phase 1A, Phase 3A, Phase 4B, Phase 4D, Phase 6A)
@@ -405,8 +423,14 @@ VTT/
 │   │   │   └── play-area/
 │   │   │       ├── dice.service.test.ts (NEW - Phase 4E)
 │   │   │       ├── dice.service.ts      (NEW - Phase 4E)
+│   │   │       ├── fog-config.routes.test.ts (NEW - Phase PM2)
+│   │   │       ├── fog-config.service.test.ts (NEW - Phase PM2)
+│   │   │       ├── fog-config.service.ts (NEW - Phase PM2)
+│   │   │       ├── fog-exploration.service.test.ts (NEW - Phase PM2)
+│   │   │       ├── fog-exploration.service.ts (NEW - Phase PM2)
+│   │   │       ├── fog-exploration.sync.test.ts (NEW - Phase PM2)
 │   │   │       ├── fog.routes.test.ts
-│   │   │       ├── fog.routes.ts
+│   │   │       ├── fog.routes.ts        (MODIFIED - Phase PM2)
 │   │   │       ├── fog.service.ts
 │   │   │       ├── initiative.service.test.ts
 │   │   │       ├── initiative.service.ts

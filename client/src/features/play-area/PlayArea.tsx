@@ -6,7 +6,10 @@ import type {
   ChatReceivedPayload,
   DrawClearedPayload,
   DrawStrokeRelayedPayload,
+  FogConfigUpdatedPayload,
+  FogExplorationSyncPayload,
   FogHiddenPayload,
+  FogMaskConfig,
   FogRegionDeletedPayload,
   FogRevealedPayload,
   FogVertex,
@@ -53,6 +56,8 @@ import { useCampaignRole } from './hooks/useCampaignRole';
 import { useCanvas } from './hooks/useCanvas';
 import { useChatMessages } from './hooks/useChatMessages';
 import { useDrawTool } from './hooks/useDrawTool';
+import { useFogConfig } from './hooks/useFogConfig';
+import { useFogExploration } from './hooks/useFogExploration';
 import { useFogRegions } from './hooks/useFogRegions';
 import { useFogViewMode } from './hooks/useFogViewMode';
 import { calcMeasureDistance, formatMeasureLabel, useMeasureTool } from './hooks/useMeasureTool';
@@ -148,6 +153,18 @@ function PlayAreaInner(): ReactElement {
     applyRemoteDelete,
     refresh: refreshFog,
   } = useFogRegions(campaignId, scene?.id);
+  const {
+    config: fogConfig,
+    applyRemoteConfig: applyRemoteFogConfig,
+    updateConfig: updateFogConfig,
+    refresh: refreshFogConfig,
+  } = useFogConfig(campaignId, scene?.id);
+  const {
+    stamps: explorationStamps,
+    applyRemoteSync: applyRemoteExploration,
+    resetExploration,
+    refresh: refreshExploration,
+  } = useFogExploration(campaignId, scene?.id);
   const {
     messages: chatMessages,
     isLoading: chatLoading,
@@ -260,6 +277,20 @@ function PlayAreaInner(): ReactElement {
       },
       [applyRemoteDelete],
     ),
+    onFogConfigUpdated: useCallback(
+      (payload: FogConfigUpdatedPayload) => {
+        if (payload.sceneId !== scene?.id) return;
+        applyRemoteFogConfig(payload.config);
+      },
+      [applyRemoteFogConfig, scene?.id],
+    ),
+    onFogExplorationSync: useCallback(
+      (payload: FogExplorationSyncPayload) => {
+        if (payload.sceneId !== scene?.id) return;
+        applyRemoteExploration(payload);
+      },
+      [applyRemoteExploration, scene?.id],
+    ),
     onVisionSync: useCallback((payload: TokenVisionSyncPayload) => {
       setVisionReveals(payload.reveals);
     }, []),
@@ -320,8 +351,10 @@ function PlayAreaInner(): ReactElement {
     onReconnect: useCallback(() => {
       refresh();
       refreshFog();
+      refreshFogConfig();
+      refreshExploration();
       setVisionReveals([]);
-    }, [refresh, refreshFog]),
+    }, [refresh, refreshFog, refreshFogConfig, refreshExploration]),
   });
 
   const [hoveredToken, setHoveredToken] = useState<HoverState | null>(null);
@@ -641,6 +674,28 @@ function PlayAreaInner(): ReactElement {
     const obfuscate = role !== 'dm' || fogViewMode === 'player';
     canvasManager.setFogRegions(fogRegions, obfuscate);
   }, [canvasManager, isReady, fogRegions, role, fogViewMode]);
+
+  // PM2 mask pipeline — scene fog settings and persisted exploration
+  useEffect(() => {
+    if (!canvasManager || !isReady) return;
+    canvasManager.setFogMaskConfig(fogConfig);
+  }, [canvasManager, isReady, fogConfig]);
+
+  useEffect(() => {
+    if (!canvasManager || !isReady) return;
+    canvasManager.setFogExploration(explorationStamps);
+  }, [canvasManager, isReady, explorationStamps]);
+
+  const handleFogConfigChange = useCallback(
+    (patch: Partial<FogMaskConfig>): void => {
+      void updateFogConfig(patch);
+    },
+    [updateFogConfig],
+  );
+
+  const handleResetExploration = useCallback((): void => {
+    void resetExploration();
+  }, [resetExploration]);
 
   // Sync active tool to canvas manager
   useEffect(() => {
@@ -1113,6 +1168,9 @@ function PlayAreaInner(): ReactElement {
             onMeasurePrivateChange={setMeasurePrivate}
             fogViewMode={fogViewMode}
             onFogViewModeChange={setFogViewMode}
+            fogConfig={role === 'dm' ? fogConfig : undefined}
+            onFogConfigChange={handleFogConfigChange}
+            onResetExploration={handleResetExploration}
             drawShapeKind={drawShapeKind}
             onDrawShapeKindChange={setDrawShapeKind}
             drawStrokeColor={drawStrokeColor}

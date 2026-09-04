@@ -1,3 +1,5 @@
+import type { FogMaskConfig } from '../types/play-area.js';
+
 export const DEFAULT_GRID_CELL_SIZE = 70;
 export const DEFAULT_GRID_COLOR = 0x000000;
 export const DEFAULT_GRID_ALPHA = 0.3;
@@ -112,6 +114,41 @@ export const TOKEN_VISION_EVENTS = {
 } as const;
 
 export type TokenVisionEvent = (typeof TOKEN_VISION_EVENTS)[keyof typeof TOKEN_VISION_EVENTS];
+
+// Fog mask pipeline constants (Phase PM2)
+export const FOG_CONFIG_EVENTS = {
+  /** Server → Client: scene fog configuration changed. */
+  FOG_CONFIG_UPDATED: 'play-area:fog:config:updated',
+  /** Server → Client: explored areas for the active scene (delta or full replace). */
+  FOG_EXPLORATION_SYNC: 'play-area:fog:exploration:sync',
+} as const;
+
+export type FogConfigEvent = (typeof FOG_CONFIG_EVENTS)[keyof typeof FOG_CONFIG_EVENTS];
+
+export const FOG_MASK_RESOLUTION_MIN = 0.1;
+export const FOG_MASK_RESOLUTION_MAX = 1;
+/** Hard cap on either mask texture dimension to bound GPU memory on large maps. */
+export const FOG_MASK_MAX_TEXTURE_DIMENSION = 4096;
+/** Maximum reveal stamps drawn into a single batched Graphics geometry buffer. */
+export const FOG_MASK_STAMPS_PER_BATCH = 512;
+/** Number of concentric rings used to approximate a radial soft edge. */
+export const FOG_MASK_SOFT_EDGE_STEPS = 6;
+/** Blur strength (px) used when edgeSoftness is 'filter'. */
+export const FOG_MASK_BLUR_STRENGTH = 8;
+/** Exploration stamps are deduplicated onto a grid of this many cells. */
+export const FOG_EXPLORATION_QUANTIZE_CELLS = 1;
+/** Upper bound on persisted exploration stamps returned for one scene. */
+export const FOG_EXPLORATION_MAX_STAMPS = 5000;
+
+export const DEFAULT_FOG_MASK_CONFIG: FogMaskConfig = {
+  fogMode: 'legacy',
+  explorationMode: 'off',
+  edgeSoftness: 'off',
+  maskResolutionScale: 0.5,
+  shroudAlpha: 0.55,
+  hiddenAlpha: 0.78,
+  edgeSoftnessRatio: 0.25,
+};
 
 // Initiative constants (Phase 4H)
 export const INITIATIVE_EVENTS = {

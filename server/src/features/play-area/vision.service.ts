@@ -1,8 +1,14 @@
-import type { TokenVisionReveal, TokenVisionSyncPayload } from '@vtt/shared';
+import type {
+  FogExplorationSyncPayload,
+  TokenVisionReveal,
+  TokenVisionSyncPayload,
+} from '@vtt/shared';
+import { FOG_CONFIG_EVENTS, TOKEN_VISION_EVENTS } from '@vtt/shared';
 import type { Server } from 'socket.io';
 
-import { TOKEN_VISION_EVENTS } from '@vtt/shared';
 import { prisma } from '../../shared/db/prisma.js';
+import { normalizeFogConfig } from './fog-config.service.js';
+import { buildExplorationCandidates, recordExploration } from './fog-exploration.service.js';
 
 interface TokenVisionRevealInternal extends TokenVisionReveal {
   /** ownerId is used for server-side role filtering; never sent to clients. */
@@ -46,6 +52,49 @@ export async function computeTokenVisionRegions(
 }
 
 /**
+ * Persist newly explored areas for a scene and broadcast the delta. No-op
+ * unless the scene runs the PM2 fog pipeline with persistent exploration.
+ *
+ * Only reveals that players are allowed to see contribute to exploration —
+ * otherwise a hidden enemy NPC would permanently uncover the map for everyone.
+ * Delivery follows the same role gate as vision sync: observers receive
+ * nothing.
+ */
+export async function syncSceneExploration(
+  io: Server,
+  campaignId: string,
+  sceneId: string,
+  reveals: TokenVisionRevealInternal[],
+): Promise<void> {
+  const scene = await prisma.scene.findFirst({
+    where: { id: sceneId, campaignId },
+    select: { cellSize: true, fogConfig: true },
+  });
+
+  if (!scene) return;
+
+  const config = normalizeFogConfig(scene.fogConfig);
+  if (config.fogMode !== 'pm2' || config.explorationMode !== 'persistent') return;
+
+  const shareable = reveals.filter(
+    (r) => r.ownerId !== null || (r.type === 'npc' && r.npcSubtype === 'ally'),
+  );
+
+  const candidates = buildExplorationCandidates(shareable, scene.cellSize);
+  const stamps = await recordExploration(sceneId, campaignId, candidates);
+  if (stamps.length === 0) return;
+
+  const payload: FogExplorationSyncPayload = { campaignId, sceneId, mode: 'append', stamps };
+  const sockets = await io.in(`campaign:${campaignId}`).fetchSockets();
+
+  for (const socket of sockets) {
+    const role = socket.data.campaignRole as string | undefined;
+    if (role !== 'dm' && role !== 'player') continue;
+    socket.emit(FOG_CONFIG_EVENTS.FOG_EXPLORATION_SYNC, payload);
+  }
+}
+
+/**
  * Emit a role-gated `play-area:token:vision:sync` to every socket in the campaign room.
  * - DM sockets receive reveals for ALL tokens (player and NPC/monster).
  * - Player sockets receive reveals for ALL player-owned tokens (shared party vision).
@@ -65,6 +114,8 @@ export async function emitVisionSync(
     const userId = socket.data.userId as string | undefined;
     emitToSocket(socket, reveals, sceneId, campaignId, role, userId);
   }
+
+  await syncSceneExploration(io, campaignId, sceneId, reveals);
 }
 
 /**
@@ -93,7 +144,9 @@ function emitToSocket(
   let filteredReveals: TokenVisionReveal[];
 
   if (role === 'dm') {
-    filteredReveals = reveals.map(({ ownerId: _ownerId, type: _type, npcSubtype: _npcSubtype, ...rest }) => rest);
+    filteredReveals = reveals.map(
+      ({ ownerId: _ownerId, type: _type, npcSubtype: _npcSubtype, ...rest }) => rest,
+    );
   } else if (role === 'player') {
     // Players share vision — each player sees all player-owned token reveals,
     // not just their own. Ally NPC tokens (type='npc', npcSubtype='ally') are

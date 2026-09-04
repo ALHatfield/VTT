@@ -1,6 +1,6 @@
 import type { DragEvent, ReactElement } from 'react';
 
-import type { CampaignRole, NpcSubtype } from '@vtt/shared';
+import type { CampaignRole, FogMaskConfig, NpcSubtype } from '@vtt/shared';
 import {
   DRAW_DEFAULT_COLOR,
   DRAW_DEFAULT_WIDTH,
@@ -13,6 +13,7 @@ import { NPC_DRAG_MIME } from '../hooks/useNpcDrop';
 import type { FogViewMode } from '../hooks/useFogViewMode';
 import type { ToolMode } from '../hooks/useToolMode';
 import styles from './CanvasToolbar.module.css';
+import { FogSettingsPanel } from './FogSettingsPanel';
 
 interface ToolDef {
   id: ToolMode;
@@ -41,6 +42,8 @@ function visibleTools(role: CampaignRole | null): ToolMode[] {
 
 export type DrawShapeKind = 'freehand' | 'rect' | 'circle';
 
+const NOOP = (): void => undefined;
+
 interface CanvasToolbarProps {
   activeTool: ToolMode;
   onToolChange: (tool: ToolMode) => void;
@@ -51,6 +54,10 @@ interface CanvasToolbarProps {
   /** Current fog view mode — DM's own view or player preview. DM-only. */
   fogViewMode?: FogViewMode;
   onFogViewModeChange?: (mode: FogViewMode) => void;
+  /** PM2 fog mask settings (Phase PM2). DM-only. */
+  fogConfig?: FogMaskConfig;
+  onFogConfigChange?: (patch: Partial<FogMaskConfig>) => void;
+  onResetExploration?: () => void;
   /** Drawing tool state (Phase 4K). */
   drawShapeKind?: DrawShapeKind;
   onDrawShapeKindChange?: (kind: DrawShapeKind) => void;
@@ -69,6 +76,9 @@ export function CanvasToolbar({
   onMeasurePrivateChange,
   fogViewMode = 'dm',
   onFogViewModeChange,
+  fogConfig,
+  onFogConfigChange,
+  onResetExploration,
   drawShapeKind = 'freehand',
   onDrawShapeKindChange,
   drawStrokeColor = DRAW_DEFAULT_COLOR,
@@ -274,6 +284,13 @@ export function CanvasToolbar({
                     />
                     <span>Player view</span>
                   </label>
+                )}
+                {fogConfig && onFogConfigChange && (
+                  <FogSettingsPanel
+                    config={fogConfig}
+                    onChange={onFogConfigChange}
+                    onResetExploration={onResetExploration ?? NOOP}
+                  />
                 )}
               </div>
             )}

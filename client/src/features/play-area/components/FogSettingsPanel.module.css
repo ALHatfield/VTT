@@ -1,0 +1,53 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.label {
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.select,
+.slider {
+  width: 100%;
+}
+
+.select {
+  background: #23233a;
+  color: #e8e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.75rem;
+}
+
+.resetBtn {
+  background: #3a2330;
+  color: #ffb8c6;
+  border: 1px solid rgba(255, 184, 198, 0.3);
+  border-radius: 4px;
+  padding: 0.3rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.resetBtn:hover {
+  background: #4a2a3c;
+}
+
+.resetBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

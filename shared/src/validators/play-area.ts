@@ -8,6 +8,8 @@ import {
   DICE_FORMULA_MAX_LENGTH,
   DRAW_WIDTH_MAX,
   DRAW_WIDTH_MIN,
+  FOG_MASK_RESOLUTION_MAX,
+  FOG_MASK_RESOLUTION_MIN,
   TOKEN_NAME_MAX_LENGTH,
   TOKEN_SIZE_MAX,
   TOKEN_SIZE_MIN,
@@ -247,6 +249,34 @@ export const fogRegionDeletePayloadSchema = z.object({
 });
 
 export type FogRegionDeleteInput = z.infer<typeof fogRegionDeletePayloadSchema>;
+
+// Fog mask pipeline validators (Phase PM2)
+
+export const fogModeSchema = z.enum(['legacy', 'pm2']);
+export const explorationModeSchema = z.enum(['off', 'persistent']);
+export const fogEdgeSoftnessSchema = z.enum(['off', 'radial', 'filter']);
+
+const unitIntervalSchema = z.number().finite().min(0).max(1);
+
+export const fogMaskConfigSchema = z.object({
+  fogMode: fogModeSchema,
+  explorationMode: explorationModeSchema,
+  edgeSoftness: fogEdgeSoftnessSchema,
+  maskResolutionScale: z
+    .number()
+    .finite()
+    .min(FOG_MASK_RESOLUTION_MIN, 'maskResolutionScale is too small')
+    .max(FOG_MASK_RESOLUTION_MAX, 'maskResolutionScale is too large'),
+  shroudAlpha: unitIntervalSchema,
+  hiddenAlpha: unitIntervalSchema,
+  edgeSoftnessRatio: unitIntervalSchema,
+});
+
+export type FogMaskConfigInput = z.infer<typeof fogMaskConfigSchema>;
+
+export const fogMaskConfigPatchSchema = fogMaskConfigSchema
+  .partial()
+  .refine((patch) => Object.keys(patch).length > 0, 'At least one fog setting is required');
 
 // Measure tool validators (Phase 4J)
 

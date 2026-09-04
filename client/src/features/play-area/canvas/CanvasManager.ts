@@ -4,6 +4,7 @@ import { Application, Assets, Container, Graphics } from 'pixi.js';
 import type {
   AssetCategory,
   CampaignRole,
+  FogMaskConfig,
   FogRegion,
   FogVertex,
   GridConfig,
@@ -13,6 +14,7 @@ import type {
   Token,
   TokenVisionReveal,
   ViewportBounds,
+  VisionStamp,
 } from '@vtt/shared';
 import { MAX_ZOOM, MIN_ZOOM, ZOOM_FACTOR } from '@vtt/shared';
 
@@ -355,6 +357,9 @@ export class CanvasManager {
     this.worldContainer.addChild(this.foregroundLayer);
     this.app.stage.addChild(this.worldContainer);
 
+    // PM2 fog masks are composed with the live renderer into RenderTextures.
+    this.foregroundLayer.attachRenderer(this.app.renderer);
+
     // Stage-level background click — fires only when no token sprite stops propagation.
     // Uses pointerup + distance guard so pan gestures don't clear selection.
     this.app.stage.eventMode = 'static';
@@ -502,6 +507,21 @@ export class CanvasManager {
   /** Render circular vision reveals around token positions on the fog layer. */
   setTokenVisionReveals(reveals: TokenVisionReveal[]): void {
     this.foregroundLayer.setTokenVisionReveals(reveals, this.currentCellSize);
+  }
+
+  /** Apply the scene's PM2 fog mask configuration (Phase PM2). */
+  setFogMaskConfig(config: FogMaskConfig): void {
+    this.foregroundLayer.setFogMaskConfig(config);
+  }
+
+  /** Apply persisted explored areas for the scene (Phase PM2). */
+  setFogExploration(stamps: VisionStamp[]): void {
+    this.foregroundLayer.setExplorationStamps(stamps);
+  }
+
+  /** Duration of the most recent PM2 fog mask recomposition, in milliseconds. */
+  getFogCompositionMs(): number {
+    return this.foregroundLayer.getFogCompositionMs();
   }
 
   setFogBrushPreview(vertices: FogVertex[] | null): void {
@@ -917,6 +937,7 @@ export class CanvasManager {
     window.removeEventListener('keydown', this.handleArrowKey);
     // Ensure marquee graphic is cleaned up if destroy() runs mid-drag
     this.clearMarqueeGraphic();
+    this.foregroundLayer.destroyFogMask();
     // In PixiJS v8, removeView is not a valid option — manually remove the canvas first
     this.app.canvas.remove();
     this.app.destroy();

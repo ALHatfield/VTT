@@ -8,6 +8,8 @@ import type {
   DrawClearedPayload,
   DrawStrokePayload,
   DrawStrokeRelayedPayload,
+  FogConfigUpdatedPayload,
+  FogExplorationSyncPayload,
   FogHiddenPayload,
   FogRegionDeletedPayload,
   FogRevealedPayload,
@@ -29,6 +31,7 @@ import {
   CHAT_EVENTS,
   DICE_EVENTS,
   DRAW_EVENTS,
+  FOG_CONFIG_EVENTS,
   FOG_EVENTS,
   INITIATIVE_EVENTS,
   MEASURE_EVENTS,
@@ -49,6 +52,8 @@ interface UsePlayAreaSocketOptions {
   onFogRevealed?: (payload: FogRevealedPayload) => void;
   onFogHidden?: (payload: FogHiddenPayload) => void;
   onFogRegionDeleted?: (payload: FogRegionDeletedPayload) => void;
+  onFogConfigUpdated?: (payload: FogConfigUpdatedPayload) => void;
+  onFogExplorationSync?: (payload: FogExplorationSyncPayload) => void;
   onVisionSync?: (payload: TokenVisionSyncPayload) => void;
   onMeasureRelayed?: (payload: MeasureRelayedPayload) => void;
   onMeasureCleared?: (payload: MeasureClearedPayload) => void;
@@ -97,6 +102,8 @@ export function usePlayAreaSocket({
   onFogRevealed,
   onFogHidden,
   onFogRegionDeleted,
+  onFogConfigUpdated,
+  onFogExplorationSync,
   onVisionSync,
   onMeasureRelayed,
   onMeasureCleared,
@@ -119,6 +126,8 @@ export function usePlayAreaSocket({
   const onFogRevealedRef = useRef(onFogRevealed);
   const onFogHiddenRef = useRef(onFogHidden);
   const onFogRegionDeletedRef = useRef(onFogRegionDeleted);
+  const onFogConfigUpdatedRef = useRef(onFogConfigUpdated);
+  const onFogExplorationSyncRef = useRef(onFogExplorationSync);
   const onVisionSyncRef = useRef(onVisionSync);
   const onMeasureRelayedRef = useRef(onMeasureRelayed);
   const onMeasureClearedRef = useRef(onMeasureCleared);
@@ -157,6 +166,12 @@ export function usePlayAreaSocket({
   useEffect(() => {
     onFogRegionDeletedRef.current = onFogRegionDeleted;
   }, [onFogRegionDeleted]);
+  useEffect(() => {
+    onFogConfigUpdatedRef.current = onFogConfigUpdated;
+  }, [onFogConfigUpdated]);
+  useEffect(() => {
+    onFogExplorationSyncRef.current = onFogExplorationSync;
+  }, [onFogExplorationSync]);
   useEffect(() => {
     onVisionSyncRef.current = onVisionSync;
   }, [onVisionSync]);
@@ -259,6 +274,14 @@ export function usePlayAreaSocket({
       onVisionSyncRef.current?.(payload);
     };
 
+    const handleFogConfigUpdated = (payload: FogConfigUpdatedPayload): void => {
+      onFogConfigUpdatedRef.current?.(payload);
+    };
+
+    const handleFogExplorationSync = (payload: FogExplorationSyncPayload): void => {
+      onFogExplorationSyncRef.current?.(payload);
+    };
+
     const handleMeasureRelayed = (payload: MeasureRelayedPayload): void => {
       onMeasureRelayedRef.current?.(payload);
     };
@@ -294,6 +317,8 @@ export function usePlayAreaSocket({
     socket.on(FOG_EVENTS.FOG_REVEALED, handleFogRevealed);
     socket.on(FOG_EVENTS.FOG_HIDDEN, handleFogHidden);
     socket.on(FOG_EVENTS.FOG_REGION_DELETED, handleFogRegionDeleted);
+    socket.on(FOG_CONFIG_EVENTS.FOG_CONFIG_UPDATED, handleFogConfigUpdated);
+    socket.on(FOG_CONFIG_EVENTS.FOG_EXPLORATION_SYNC, handleFogExplorationSync);
     socket.on(TOKEN_VISION_EVENTS.TOKEN_VISION_SYNC, handleVisionSync);
     socket.on(MEASURE_EVENTS.MEASURE_RELAYED, handleMeasureRelayed);
     socket.on(MEASURE_EVENTS.MEASURE_CLEARED, handleMeasureCleared);
