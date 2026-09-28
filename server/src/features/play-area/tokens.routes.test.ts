@@ -45,7 +45,7 @@ async function createCampaign(cookies: string[]): Promise<string> {
 describe('Play Area Token Routes', () => {
   // Clean up any leftover data from previous (aborted) runs
   beforeAll(async () => {
-    const TEST_USERNAMES = ['Tok_DM', 'Tok_Player', 'Tok_Observer', 'Tok_OtherPlayer', 'Tok_OtherPlayer2'];
+    const TEST_USERNAMES = ['Tok_DM', 'Tok_Player', 'Tok_Observer', 'Tok_OtherPlayer', 'Tok_OtherPlayer2', 'Stranger'];
     const leftover = await prisma.user.findMany({ where: { username: { in: TEST_USERNAMES } } });
     const leftoverIds = leftover.map((u) => u.id);
     if (leftoverIds.length > 0) {

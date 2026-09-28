@@ -37,7 +37,6 @@ VTT/
 │   │   ├── next-phase.prompt.md
 │   │   ├── note.prompt.md
 │   │   └── update-feature.prompt.md
-│   ├── .DS_Store
 │   └── copilot-instructions.md
 ├── .project/
 │   ├── .archive/
@@ -69,6 +68,7 @@ VTT/
 │   │   │   ├── play-area-4I.md          (NEW - Phase 4I)
 │   │   │   ├── play-area-4J.md
 │   │   │   ├── play-area-4K.md
+│   │   │   ├── play-area-PM1.md         (NEW - Phase PM1)
 │   │   │   ├── play-area-PM2.md         (NEW - Phase PM2)
 │   │   │   ├── portal-2A.md
 │   │   │   └── README.md
@@ -103,6 +103,7 @@ VTT/
 │   │       │   ├── phase-4I.md          (NEW - Phase 4I)
 │   │       │   ├── phase-4J.md
 │   │       │   ├── phase-4K.md
+│   │       │   ├── phase-PM1.md         (NEW - Phase PM1)
 │   │       │   └── phase-PM2.md         (NEW - Phase PM2)
 │   │       ├── portal/
 │   │       │   └── phase-2A.md
@@ -140,7 +141,6 @@ VTT/
 │   │   └── wireframe.png
 │   ├── phase-0.md
 │   ├── project-tree.md                  (MODIFIED - Phase 0, Phase 1A, Phase 2A, Phase 3A, Phase 3B, Phase 4A, Phase 4B, Phase 4B.1, Phase 4C, Phase 4D, Phase 4E)
-│   ├── qa
 │   └── roadmap.md                       (MODIFIED - Phase 0, Phase 1A, Phase 2A, Phase 3A, Phase 3B, Phase 4A, Phase 4B, Phase 4B.1, Phase 4C, Phase 4D, Phase 4E)
 ├── .vscode/
 │   ├── extensions.json
@@ -258,6 +258,9 @@ VTT/
 │   │   │   │   │   ├── ChatPanel.module.css (MODIFIED - Phase 4A, Phase 4D, Phase 4E)
 │   │   │   │   │   ├── ChatPanel.test.tsx (MODIFIED - Phase 4D, Phase 4E)
 │   │   │   │   │   ├── ChatPanel.tsx    (MODIFIED - Phase 4A, Phase 4D, Phase 4E)
+│   │   │   │   │   ├── DiceOverlay.module.css (NEW - Phase PM1)
+│   │   │   │   │   ├── DiceOverlay.test.tsx (NEW - Phase PM1)
+│   │   │   │   │   ├── DiceOverlay.tsx  (NEW - Phase PM1)
 │   │   │   │   │   ├── DiceRollerButton.module.css (MODIFIED - Phase 4A, Phase 4E)
 │   │   │   │   │   ├── DiceRollerButton.tsx (MODIFIED - Phase 4A, Phase 4E)
 │   │   │   │   │   ├── FogSettingsPanel.module.css (NEW - Phase PM2)
@@ -268,11 +271,20 @@ VTT/
 │   │   │   │   │   ├── TurnTracker.module.css
 │   │   │   │   │   ├── TurnTracker.test.tsx (MODIFIED - Phase 4I)
 │   │   │   │   │   └── TurnTracker.tsx
+│   │   │   │   ├── dice3d/              (NEW - Phase PM1)
+│   │   │   │   │   ├── animator.ts      (NEW - Phase PM1)
+│   │   │   │   │   ├── constants.test.ts (NEW - Phase PM1)
+│   │   │   │   │   ├── roll-mapping.test.ts (NEW - Phase PM1)
+│   │   │   │   │   ├── roll-mapping.ts  (NEW - Phase PM1)
+│   │   │   │   │   └── three-dice-animator.ts (NEW - Phase PM1)
 │   │   │   │   ├── hooks/
+│   │   │   │   │   ├── use3dDiceReveal.test.ts (NEW - Phase PM1)
+│   │   │   │   │   ├── use3dDiceReveal.ts (NEW - Phase PM1)
 │   │   │   │   │   ├── useActiveScene.ts (NEW - Phase 4B)
 │   │   │   │   │   ├── useCampaignRole.ts (NEW - Phase 4B)
 │   │   │   │   │   ├── useCanvas.ts     (NEW - Phase 4A)
 │   │   │   │   │   ├── useChatMessages.ts (NEW - Phase 4D)
+│   │   │   │   │   ├── useDiceSettings.ts (NEW - Phase PM1)
 │   │   │   │   │   ├── useDrawTool.test.ts
 │   │   │   │   │   ├── useDrawTool.ts
 │   │   │   │   │   ├── useFogConfig.test.ts (NEW - Phase PM2)
@@ -327,31 +339,36 @@ VTT/
 │   │   ├── main.tsx                     (MODIFIED - Phase 1A)
 │   │   ├── test-setup.ts                (MODIFIED - Phase 1A, Phase 4D)
 │   │   └── vite-env.d.ts
-│   ├── .DS_Store
 │   ├── index.html
 │   ├── package.json                     (MODIFIED - Phase 1A, Phase 4A, Phase 4C)
 │   ├── tsconfig.json
 │   ├── tsconfig.node.json
 │   ├── vite.config.ts                   (MODIFIED - Phase 4H)
 │   └── vitest.config.ts                 (MODIFIED - Phase 1A)
+├── dice/                                (NEW - Phase PM1)
+│   ├── src/                             (NEW - Phase PM1)
+│   │   ├── engine/                      (NEW - Phase PM1)
+│   │   │   ├── dice.test.ts             (NEW - Phase PM1)
+│   │   │   └── dice.ts                  (NEW - Phase PM1)
+│   │   ├── renderer/                    (NEW - Phase PM1)
+│   │   │   ├── geometry.test.ts         (NEW - Phase PM1)
+│   │   │   ├── geometry.ts              (NEW - Phase PM1)
+│   │   │   ├── physics.ts               (NEW - Phase PM1)
+│   │   │   ├── scene.test.ts            (NEW - Phase PM1)
+│   │   │   └── scene.ts                 (NEW - Phase PM1)
+│   │   └── index.ts                     (NEW - Phase PM1)
+│   ├── package.json                     (NEW - Phase PM1)
+│   ├── tsconfig.json                    (NEW - Phase PM1)
+│   └── vitest.config.ts                 (NEW - Phase PM1)
 ├── memories/                            (NEW - Phase 5A)
 │   └── session/                         (NEW - Phase 5A)
 │       ├── editor-5A-retro.md           (NEW - Phase 5A)
-│       ├── editor-5B-retro.md
-│       ├── editor-5C-retro.md
-│       ├── editor-5E-retro.md
-│       ├── play-area-4F.3-retro.md
-│       ├── play-area-4F.4-retro.md
-│       ├── play-area-4F.5-retro.md
-│       ├── play-area-4H-retro.md
-│       ├── play-area-4I-retro.md        (NEW - Phase 4I)
-│       ├── play-area-4J-retro.md
-│       ├── play-area-4K-retro.md
-│       └── play-area-PM2-retro.md       (NEW - Phase PM2)
+│       └── editor-5B-retro.md
 ├── scripts/
 │   ├── archive-feature-docs.mjs
 │   ├── docs-check.mjs
 │   ├── filter-test-results.mjs
+│   ├── package-patch.mjs                (NEW - Phase PM1)
 │   ├── phase-context.mjs
 │   ├── phase-scaffold.mjs
 │   ├── phase-workflow.mjs               (MODIFIED - Phase 4H)
@@ -468,10 +485,8 @@ VTT/
 │   ├── uploads/                         (NEW - Phase 5A)
 │   │   ├── assets                       (NEW - Phase 5A)
 │   │   └── thumbnails                   (NEW - Phase 5A)
-│   ├── .DS_Store
 │   ├── .env
 │   ├── .env.example
-│   ├── .env.local
 │   ├── package.json                     (MODIFIED - Phase 1A, Phase 4C)
 │   ├── tsconfig.json                    (MODIFIED - Phase 5A)
 │   └── vitest.config.ts                 (MODIFIED - Phase 3B, Phase 4C)
@@ -506,11 +521,7 @@ VTT/
 │   ├── tsconfig.json
 │   ├── tsconfig.tsbuildinfo
 │   └── vitest.config.ts
-├── uploads/                             (NEW - Phase 5A)
-│   ├── assets                           (NEW - Phase 5A)
-│   └── thumbnails                       (NEW - Phase 5A)
 ├── .copilotignore
-├── .DS_Store
 ├── .gitignore                           (NEW - Phase 0)
 ├── .prettierrc                          (NEW - Phase 0)
 ├── eslint.config.js                     (NEW - Phase 0)

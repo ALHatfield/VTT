@@ -1,44 +1,45 @@
 import type {
-  AuraUpdatedPayload,
-  ChatReceivedPayload,
-  DrawClearedPayload,
-  DrawStrokeRelayedPayload,
-  FogHiddenPayload,
-  FogRegionDeletedPayload,
-  FogRevealedPayload,
-  InitiativeUpdatedPayload,
-  MeasureBroadcastPayload,
-  MeasureClearPayload,
-  PresencePayload,
-  TokenMovedPayload,
-  TokenUpdatedPayload,
+    AuraUpdatedPayload,
+    ChatReceivedPayload,
+    DrawClearedPayload,
+    DrawStrokeRelayedPayload,
+    FogHiddenPayload,
+    FogRegionDeletedPayload,
+    FogRevealedPayload,
+    InitiativeUpdatedPayload,
+    MeasureBroadcastPayload,
+    MeasureClearPayload,
+    PresencePayload,
+    TokenMovedPayload,
+    TokenUpdatedPayload,
 } from '@vtt/shared';
 import {
-  AURA_EVENTS,
-  CHAT_EVENTS,
-  DICE_EVENTS,
-  DRAW_EVENTS,
-  FOG_EVENTS,
-  INITIATIVE_EVENTS,
-  MEASURE_EVENTS,
-  PLAY_AREA_EVENTS,
-  VISION_SYNC_DEBOUNCE_MS,
-  auraUpdatePayloadSchema,
-  chatSendPayloadSchema,
-  diceRollPayloadSchema,
-  drawClearPayloadSchema,
-  drawStrokePayloadSchema,
-  fogHidePayloadSchema,
-  fogRegionDeletePayloadSchema,
-  fogRevealPayloadSchema,
-  initiativeAdvancePayloadSchema,
-  initiativeEndPayloadSchema,
-  initiativeReorderPayloadSchema,
-  initiativeStartPayloadSchema,
-  measureBroadcastPayloadSchema,
-  measureClearPayloadSchema,
-  roomJoinPayloadSchema,
-  tokenMoveSocketPayloadSchema,
+    AURA_EVENTS,
+    CHAT_EVENTS,
+    DICE_EVENTS,
+    DICE_ROLL_COOLDOWN_MS,
+    DRAW_EVENTS,
+    FOG_EVENTS,
+    INITIATIVE_EVENTS,
+    MEASURE_EVENTS,
+    PLAY_AREA_EVENTS,
+    VISION_SYNC_DEBOUNCE_MS,
+    auraUpdatePayloadSchema,
+    chatSendPayloadSchema,
+    diceRollPayloadSchema,
+    drawClearPayloadSchema,
+    drawStrokePayloadSchema,
+    fogHidePayloadSchema,
+    fogRegionDeletePayloadSchema,
+    fogRevealPayloadSchema,
+    initiativeAdvancePayloadSchema,
+    initiativeEndPayloadSchema,
+    initiativeReorderPayloadSchema,
+    initiativeStartPayloadSchema,
+    measureBroadcastPayloadSchema,
+    measureClearPayloadSchema,
+    roomJoinPayloadSchema,
+    tokenMoveSocketPayloadSchema,
 } from '@vtt/shared';
 import type { Server, Socket } from 'socket.io';
 
@@ -46,11 +47,11 @@ import { prisma } from '../../shared/db/prisma.js';
 import { parseDiceFormula, rollDiceFormula } from './dice.service.js';
 import { deleteFogRegion, hideFogByPolygon, revealFogRegion } from './fog.service.js';
 import {
-  advanceInitiativeForCampaign,
-  endInitiativeForCampaign,
-  getInitiativeState,
-  reorderInitiativeForCampaign,
-  startInitiativeForCampaign,
+    advanceInitiativeForCampaign,
+    endInitiativeForCampaign,
+    getInitiativeState,
+    reorderInitiativeForCampaign,
+    startInitiativeForCampaign,
 } from './initiative.service.js';
 import { updateToken } from './tokens.service.js';
 import { emitVisionSync, emitVisionSyncToSocket } from './vision.service.js';
@@ -579,6 +580,17 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
         return;
       }
 
+      // Guard: one roll at a time per user — reject rapid-fire rolls
+      const lastRollAt = socket.data.lastDiceRollAt as number | undefined;
+      const now = Date.now();
+      if (lastRollAt !== undefined && now - lastRollAt < DICE_ROLL_COOLDOWN_MS) {
+        socket.emit(PLAY_AREA_EVENTS.ERROR, {
+          code: 'ROLL_IN_PROGRESS',
+          message: 'Wait for your previous roll to finish',
+        });
+        return;
+      }
+
       const parsedFormula = parseDiceFormula(formula);
       if (!parsedFormula) {
         socket.emit(PLAY_AREA_EVENTS.ERROR, {
@@ -588,6 +600,7 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
         return;
       }
 
+      socket.data.lastDiceRollAt = now;
       const rollResult = rollDiceFormula(parsedFormula);
 
       const row = await prisma.campaignMessage.create({

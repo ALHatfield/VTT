@@ -16,35 +16,6 @@
 
 ## Post-MVP Phases
 
-## Phase PM1: 3D Dice Physics & Rendering (Post-MVP)
-
-**Dependencies:** Phase 4E
-
-**Notes:** `.project/notes/HANDOFF-3d-dice-roller.md`
-**Project_Pathfinder:** `~/Desktop/dice`
-
-### Goals
-
-- Replace instant roll feedback with an optional immersive 3D dice throw overlay
-- Preserve authoritative server roll results while improving visual experience
-
-### Tasks
-
-- [ ] Extract reusable dice engine from `~/Desktop/dice` into npm workspace package (`dice/`)
-- [ ] Package core primitives (`DiceDefinition`, physics config, roll lifecycle types)
-- [ ] Package 3D renderer and scene orchestration (`SceneManager`) with clean mount/unmount API
-- [ ] Integrate 3D dice overlay canvas in Play Area UI without disrupting PixiJS map interactions
-- [ ] Wire chat + token quick-roll triggers to start a 3D throw animation
-- [ ] Keep server roll authority: animation reveals server-produced result, never client-generated result
-- [ ] Add accessibility and fallback mode (instant 2D result when WebGL/physics is unavailable)
-- [ ] Add settings toggle per user for 3D dice enable/disable and reduced motion behavior
-- [ ] Add automated tests for package API contracts and client integration boundaries
-- [ ] Add manual performance pass for low-end devices (target stable canvas interaction during throws)
-
-### Open Questions
-
----
-
 ## Phase PM3: Fog of War - Line of Sight & Obstacles (Post-MVP)
 
 **Dependencies:** Phase PM2 + obstacle/wall geometry model

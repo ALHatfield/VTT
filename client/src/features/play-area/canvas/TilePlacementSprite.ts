@@ -4,8 +4,8 @@ import { Container, Graphics, Rectangle, Sprite } from 'pixi.js';
 import { snapToGrid } from './grid-utils';
 
 const SELECTION_BORDER_COLOR = 0x4fc3f7;
-const SELECTION_BORDER_ALPHA = 0.9;
-const SELECTION_BORDER_WIDTH = 2;
+const SELECTION_BORDER_ALPHA = 1;
+const SELECTION_BORDER_WIDTH = 4;
 const DRAG_Z_INDEX = 200;
 
 /** Resize handle size (px) — square corner handle rendered at SE corner when selected. */

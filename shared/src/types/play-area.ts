@@ -330,6 +330,13 @@ export interface DiceRollPayload {
   formula: string;
 }
 
+/**
+ * Which dice roll presentation the client uses (Phase PM1).
+ * Mirrors the FogMode pattern — `instant` is the Phase 4E chat-only path,
+ * `3d` is the Three.js overlay. New renderers add a mode here.
+ */
+export type DiceAnimationMode = 'instant' | '3d';
+
 // ---------------------------------------------------------------------------
 // Fog of war types (Phase 4F)
 // ---------------------------------------------------------------------------

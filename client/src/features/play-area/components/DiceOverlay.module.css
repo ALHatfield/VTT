@@ -1,0 +1,16 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+
+.overlay.interactive {
+  pointer-events: auto;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}

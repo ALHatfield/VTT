@@ -9,7 +9,7 @@
 | `auth`      | Auth & Sessions | 1A–1B                     | In Progress | 1A Complete   |
 | `portal`    | Portal          | 2A–2B                     | In Progress | 2A Complete   |
 | `campaigns` | Campaigns       | 3A–3B                     | Complete    | 3B Complete   |
-| `play-area` | Play Area       | 4A–4K, 4F.1–4F.5, PM1–PM6 | In Progress | PM2 Complete  |
+| `play-area` | Play Area       | 4A–4K, 4F.1–4F.5, PM1–PM6 | In Progress | PM1 Complete  |
 | `editor`    | Campaign Editor | 5A–5E, 5A.1               | Complete    | 5E Complete   |
 
 | `characters` | Character Sheets | 6A–6E | In Progress | 6A Complete |

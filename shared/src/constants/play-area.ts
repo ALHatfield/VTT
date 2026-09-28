@@ -60,7 +60,7 @@ export const SOCKET_TOKEN_MOVE_DEBOUNCE_MS = 100;
 
 // Chat constants (Phase 4D)
 export const CHAT_MESSAGE_MAX_LENGTH = 2000;
-export const CHAT_HISTORY_LIMIT = 50;
+export const CHAT_HISTORY_LIMIT = 16;
 export const CHAT_HISTORY_MAX_LIMIT = 100;
 
 // Extend PLAY_AREA_EVENTS with chat events
@@ -77,6 +77,8 @@ export type ChatEvent = (typeof CHAT_EVENTS)[keyof typeof CHAT_EVENTS];
 export const DICE_FORMULA_MAX_LENGTH = 100;
 export const DICE_MAX_COUNT = 100;
 export const DICE_MAX_SIDES = 1000;
+/** Server-side floor between rolls from the same user — one roll at a time. */
+export const DICE_ROLL_COOLDOWN_MS = 1000;
 
 export const DICE_EVENTS = {
   // Client → Server
@@ -84,6 +86,18 @@ export const DICE_EVENTS = {
 } as const;
 
 export type DiceEvent = (typeof DICE_EVENTS)[keyof typeof DICE_EVENTS];
+
+// 3D dice animation constants (Phase PM1)
+/** Die side counts the 3D renderer supports; other sizes fall back to instant reveal. */
+export const DICE_3D_SUPPORTED_SIDES = [4, 6, 8, 10, 12, 20] as const;
+/** Max dice animated per roll — matches the renderer's release position spread. */
+export const DICE_3D_MAX_DICE = 8;
+/** Max rolls animating/lingering at once — matches the renderer's landing slots. */
+export const DICE_3D_MAX_CONCURRENT_ROLLS = 4;
+/** Safety timeout: if the 3D animation never completes, reveal the roll in chat anyway. */
+export const DICE_3D_REVEAL_TIMEOUT_MS = 8000;
+/** localStorage key for the per-user dice animation mode preference. */
+export const DICE_3D_STORAGE_KEY = 'vtt:dice-animation-mode';
 
 // Fog constants (Phase 4F)
 export const FOG_EVENTS = {

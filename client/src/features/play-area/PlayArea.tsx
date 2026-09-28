@@ -3,35 +3,37 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import type {
-  ChatReceivedPayload,
-  DrawClearedPayload,
-  DrawStrokeRelayedPayload,
-  FogConfigUpdatedPayload,
-  FogExplorationSyncPayload,
-  FogHiddenPayload,
-  FogMaskConfig,
-  FogRegionDeletedPayload,
-  FogRevealedPayload,
-  FogVertex,
-  InitiativeState,
-  InitiativeUpdatedPayload,
-  MapData,
-  MeasureClearedPayload,
-  MeasureRelayedPayload,
-  TileAsset,
-  TokenCreatedPayload,
-  TokenDeletedPayload,
-  TokenMovedPayload,
-  TokenUpdatedPayload,
-  TokenVisionReveal,
-  TokenVisionSyncPayload,
+    ChatMessage,
+    ChatReceivedPayload,
+    DrawClearedPayload,
+    DrawStrokeRelayedPayload,
+    FogConfigUpdatedPayload,
+    FogExplorationSyncPayload,
+    FogHiddenPayload,
+    FogMaskConfig,
+    FogRegionDeletedPayload,
+    FogRevealedPayload,
+    FogVertex,
+    InitiativeState,
+    InitiativeUpdatedPayload,
+    MapData,
+    MeasureClearedPayload,
+    MeasureRelayedPayload,
+    TileAsset,
+    TokenCreatedPayload,
+    TokenDeletedPayload,
+    TokenMovedPayload,
+    TokenUpdatedPayload,
+    TokenVisionReveal,
+    TokenVisionSyncPayload,
 } from '@vtt/shared';
 import {
-  DEFAULT_GRID_ALPHA,
-  DEFAULT_GRID_CELL_SIZE,
-  DEFAULT_GRID_COLOR,
-  DRAW_DEFAULT_COLOR,
-  DRAW_DEFAULT_WIDTH,
+    DEFAULT_GRID_ALPHA,
+    DEFAULT_GRID_CELL_SIZE,
+    DEFAULT_GRID_COLOR,
+    DICE_3D_REVEAL_TIMEOUT_MS,
+    DRAW_DEFAULT_COLOR,
+    DRAW_DEFAULT_WIDTH,
 } from '@vtt/shared';
 
 import { useAuth } from '../auth/AuthContext';
@@ -48,13 +50,16 @@ import { CampaignToolbar } from './components/CampaignToolbar';
 import type { DrawShapeKind } from './components/CanvasToolbar';
 import { CanvasToolbar } from './components/CanvasToolbar';
 import { ChatPanel } from './components/ChatPanel';
+import { DiceOverlay } from './components/DiceOverlay';
 import { DiceRollerButton } from './components/DiceRollerButton';
 import { TokenHoverCard } from './components/TokenHoverCard';
 import { TurnTracker } from './components/TurnTracker';
+import { use3dDiceReveal } from './hooks/use3dDiceReveal';
 import { useActiveScene } from './hooks/useActiveScene';
 import { useCampaignRole } from './hooks/useCampaignRole';
 import { useCanvas } from './hooks/useCanvas';
 import { useChatMessages } from './hooks/useChatMessages';
+import { useDiceSettings } from './hooks/useDiceSettings';
 import { useDrawTool } from './hooks/useDrawTool';
 import { useFogConfig } from './hooks/useFogConfig';
 import { useFogExploration } from './hooks/useFogExploration';
@@ -171,6 +176,44 @@ function PlayAreaInner(): ReactElement {
     addMessage,
   } = useChatMessages(campaignId);
 
+  // 3D dice (Phase PM1) — optional Three.js overlay; 'instant' preserves 4E behavior
+  const { mode: diceMode, setMode: setDiceMode, effectiveMode: diceEffectiveMode } = useDiceSettings();
+  const [diceCameraControls, setDiceCameraControls] = useState(false);
+  // Set when animator creation fails (e.g. WebGL context loss) — forces instant reveal
+  const [dice3dUnavailable, setDice3dUnavailable] = useState(false);
+  const is3dDiceActive =
+    diceEffectiveMode === '3d' && editorMode === 'play' && !dice3dUnavailable;
+
+  // One roll at a time per client — locked on emit, unlocked when the user's
+  // own roll is revealed in chat (or by the safety timeout)
+  const [isRollInFlight, setIsRollInFlight] = useState(false);
+  const rollGateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearRollGate = useCallback((): void => {
+    if (rollGateTimeoutRef.current !== null) {
+      clearTimeout(rollGateTimeoutRef.current);
+      rollGateTimeoutRef.current = null;
+    }
+    setIsRollInFlight(false);
+  }, []);
+  useEffect(
+    () => (): void => {
+      if (rollGateTimeoutRef.current !== null) clearTimeout(rollGateTimeoutRef.current);
+    },
+    [],
+  );
+  const addMessageWithRollGate = useCallback(
+    (message: ChatMessage): void => {
+      if (message.type === 'roll' && message.userId === user?.id) clearRollGate();
+      addMessage(message);
+    },
+    [addMessage, clearRollGate, user?.id],
+  );
+
+  const { handleIncomingMessage, pendingRolls, handleRollComplete } = use3dDiceReveal({
+    enabled: is3dDiceActive,
+    addMessage: addMessageWithRollGate,
+  });
+
   const { placements, createPlacement, updatePlacement, deletePlacement } = useTilePlacements(
     campaignId,
     scene?.id,
@@ -255,9 +298,9 @@ function PlayAreaInner(): ReactElement {
     ),
     onChatReceived: useCallback(
       (payload: ChatReceivedPayload) => {
-        addMessage(payload.message);
+        handleIncomingMessage(payload.message);
       },
-      [addMessage],
+      [handleIncomingMessage],
     ),
     onFogRevealed: useCallback(
       (payload: FogRevealedPayload) => {
@@ -356,6 +399,21 @@ function PlayAreaInner(): ReactElement {
       setVisionReveals([]);
     }, [refresh, refreshFog, refreshFogConfig, refreshExploration]),
   });
+
+  // Gated roll entry point — ignores requests while the user's own roll is in flight
+  const handleDiceRoll = useCallback(
+    (formula: string): void => {
+      if (isRollInFlight) return;
+      setIsRollInFlight(true);
+      // Safety net: unlock even if the server errors or the reveal never happens
+      rollGateTimeoutRef.current = setTimeout(() => {
+        rollGateTimeoutRef.current = null;
+        setIsRollInFlight(false);
+      }, DICE_3D_REVEAL_TIMEOUT_MS + 2000);
+      emitDiceRoll(formula);
+    },
+    [isRollInFlight, emitDiceRoll],
+  );
 
   const [hoveredToken, setHoveredToken] = useState<HoverState | null>(null);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
@@ -1344,14 +1402,32 @@ function PlayAreaInner(): ReactElement {
                   onHPChange={handleHPChange}
                   onVisionRadiusChange={handleVisionRadiusChange}
                   onAuraChange={handleAuraChange}
-                  onQuickRoll={emitDiceRoll}
+                  onQuickRoll={handleDiceRoll}
                   canvasWrapperRef={canvasWrapperRef}
                 />
               );
             })()}
+          {/* 3D dice overlay — transparent Three.js canvas above the map (Phase PM1) */}
+          {is3dDiceActive && (
+            <DiceOverlay
+              pendingRolls={pendingRolls}
+              onRollComplete={handleRollComplete}
+              onAnimatorError={() => {
+                setDice3dUnavailable(true);
+              }}
+              cameraControlsEnabled={diceCameraControls}
+            />
+          )}
           {editorMode === 'play' && (
             <div className={styles.diceRollerAnchor}>
-              <DiceRollerButton onRoll={emitDiceRoll} />
+              <DiceRollerButton
+                onRoll={handleDiceRoll}
+                rollDisabled={isRollInFlight}
+                animationMode={diceMode}
+                onAnimationModeChange={setDiceMode}
+                cameraControlsEnabled={import.meta.env.DEV ? diceCameraControls : undefined}
+                onCameraControlsChange={import.meta.env.DEV ? setDiceCameraControls : undefined}
+              />
             </div>
           )}
         </div>
@@ -1374,7 +1450,7 @@ function PlayAreaInner(): ReactElement {
               isLoading={chatLoading}
               isConnected={isConnected}
               onSend={emitChatSend}
-              onDiceRoll={emitDiceRoll}
+              onDiceRoll={handleDiceRoll}
             />
           </aside>
         )}

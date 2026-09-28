@@ -6,7 +6,9 @@ import path from 'node:path';
 
 const ROOT_DIR = process.cwd();
 const TEST_FILE_PATTERN = /\.(test|spec)\.(ts|tsx)$/;
-const TEST_ROOTS = ['client/src', 'server/src', 'shared/src'];
+const TEST_ROOTS = ['client/src', 'server/src', 'shared/src', 'dice/src'];
+// Transient socket errors from supertest/undici — retry the run once before failing
+const FLAKE_PATTERN = /ECONNRESET|ECONNREFUSED|EPIPE|socket hang up/;
 
 function collectTestFiles(dir) {
   const absoluteDir = path.join(ROOT_DIR, dir);
@@ -72,7 +74,7 @@ function runVitest(cwd, testPaths, label) {
 }
 
 function resolveTestCommand(file) {
-  for (const workspace of ['client', 'server', 'shared']) {
+  for (const workspace of ['client', 'server', 'shared', 'dice']) {
     const prefix = `${workspace}/`;
     if (file.startsWith(prefix)) {
       return {
@@ -119,6 +121,20 @@ function printFailures(testResults) {
       }
     }
   }
+}
+
+/** True when every failure in the run looks like a transient socket-level flake. */
+function isTransientFailure(data) {
+  let sawFailure = false;
+  for (const suite of data.testResults ?? []) {
+    for (const assertion of suite.assertionResults ?? []) {
+      if (assertion.status !== 'failed') continue;
+      sawFailure = true;
+      const messages = assertion.failureMessages ?? [];
+      if (!messages.some((message) => FLAKE_PATTERN.test(message))) return false;
+    }
+  }
+  return sawFailure;
 }
 
 async function main() {
@@ -173,19 +189,39 @@ async function main() {
     }
 
     const data = parseJsonOutput(label, output);
-    totals.suites += data.numTotalTestSuites ?? 0;
-    totals.passedSuites += data.numPassedTestSuites ?? 0;
-    totals.failedSuites += data.numFailedTestSuites ?? 0;
-    totals.tests += data.numTotalTests ?? 0;
-    totals.passedTests += data.numPassedTests ?? 0;
-    totals.failedTests += data.numFailedTests ?? 0;
-    totals.skippedTests += data.numPendingTests ?? 0;
 
-    if ((data.numFailedTests ?? 0) > 0 || result.status !== 0) {
+    // One retry when all failures match the transient socket-flake signature
+    let finalResult = result;
+    let finalData = data;
+    if (((data.numFailedTests ?? 0) > 0 || result.status !== 0) && isTransientFailure(data)) {
+      console.log(`RETRY ${label} — transient socket error (ECONNRESET-class flake)`);
+      finalResult = await runVitest(cwd, testPaths, label);
+      if (finalResult.error) {
+        console.log(`Failed to run Vitest for ${label}: ${finalResult.error.message}`);
+        process.exit(1);
+      }
+      const retryOutput = (finalResult.stdout ?? '').trim();
+      if (retryOutput.length === 0) {
+        console.log(`No test output received for ${label} on retry.`);
+        if (finalResult.stderr) console.log(finalResult.stderr.slice(0, 4000));
+        process.exit(finalResult.status ?? 1);
+      }
+      finalData = parseJsonOutput(label, retryOutput);
+    }
+
+    totals.suites += finalData.numTotalTestSuites ?? 0;
+    totals.passedSuites += finalData.numPassedTestSuites ?? 0;
+    totals.failedSuites += finalData.numFailedTestSuites ?? 0;
+    totals.tests += finalData.numTotalTests ?? 0;
+    totals.passedTests += finalData.numPassedTests ?? 0;
+    totals.failedTests += finalData.numFailedTests ?? 0;
+    totals.skippedTests += finalData.numPendingTests ?? 0;
+
+    if ((finalData.numFailedTests ?? 0) > 0 || finalResult.status !== 0) {
       console.log(`--- FAILURES (${label}) ---`);
-      printFailures(data.testResults ?? []);
-      if (result.stderr) console.log(result.stderr.slice(0, 4000));
-      process.exit(result.status ?? 1);
+      printFailures(finalData.testResults ?? []);
+      if (finalResult.stderr) console.log(finalResult.stderr.slice(0, 4000));
+      process.exit(finalResult.status ?? 1);
     }
   }
 
@@ -202,7 +238,8 @@ function compactRuns(files) {
   const clientFiles = files.filter((file) => file.startsWith('client/'));
   const serverFiles = files.filter((file) => file.startsWith('server/'));
   const sharedFiles = files.filter((file) => file.startsWith('shared/'));
-  return [clientFiles, ...serverFiles.map((file) => [file]), sharedFiles].filter(
+  const diceFiles = files.filter((file) => file.startsWith('dice/'));
+  return [clientFiles, ...serverFiles.map((file) => [file]), sharedFiles, diceFiles].filter(
     (runFiles) => runFiles.length > 0,
   );
 }

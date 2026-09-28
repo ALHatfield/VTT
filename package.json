@@ -6,10 +6,11 @@
   "workspaces": [
     "client",
     "server",
-    "shared"
+    "shared",
+    "dice"
   ],
   "scripts": {
-    "clean": "npx rimraf node_modules client/node_modules server/node_modules shared/node_modules",
+    "clean": "npx rimraf node_modules client/node_modules server/node_modules shared/node_modules dice/node_modules",
     "start": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev": "npm run start",
     "dev:client": "npm run dev -w client",
@@ -17,7 +18,7 @@
     "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
     "test": "vitest",
     "copilot:test": "node scripts/run-compact-tests.mjs",
-    "copilot:verify": "npm run copilot:lint -w client && npm run copilot:lint -w server && npm run copilot:test",
+    "copilot:verify": "npm run copilot:lint -w client && npm run copilot:lint -w server && npm run copilot:lint -w dice && npm run copilot:test",
     "slug:context": "node scripts/slug-context.mjs",
     "phase:start": "node scripts/phase-workflow.mjs start",
     "phase:prep": "node scripts/phase-workflow.mjs prep",
@@ -45,6 +46,8 @@
     "docs:sync-architect": "node scripts/sync-architect.mjs",
     "docs:completion": "node scripts/scaffold-completion.mjs",
     "docs:archive-phases": "node scripts/archive-feature-docs.mjs",
+    "patch:package": "node scripts/package-patch.mjs",
+    "patch:apply": "node scripts/patch-apply.mjs",
     "db:migrate": "cd server && npx prisma migrate dev",
     "db:seed": "cd server && npx prisma db seed",
     "db:reset-canvas": "cd server && npx tsx prisma/reset-canvas.ts",

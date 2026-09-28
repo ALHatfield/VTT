@@ -60,12 +60,13 @@ function run(command) {
 
 function getPidsForPortWindows(port) {
   try {
-    const output = run(`netstat -ano -p tcp`);
+    // `-p tcp` would omit IPv6 listeners (e.g. Vite on [::1]), so filter TCP rows manually.
+    const output = run(`netstat -ano`);
 
     const pids = output
       .split(/\r?\n/)
       .map((line) => line.trim())
-      .filter((line) => line.length > 0)
+      .filter((line) => /^TCP\s/i.test(line))
       .filter((line) => /LISTENING/i.test(line))
       .filter((line) => {
         const localAddr = line.split(/\s+/)[1] ?? '';
@@ -132,7 +133,7 @@ function killPorts(ports) {
     for (const pid of pids) {
       try {
         if (process.platform === 'win32') {
-          execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+          execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
         } else {
           execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
         }

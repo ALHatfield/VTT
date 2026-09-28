@@ -15,6 +15,11 @@ describe('Auth Routes', () => {
     testUserPassword = 'password123';
     const passwordHash = await hashPassword(testUserPassword);
 
+    // Clean up leftovers from previous (aborted) runs so create never collides
+    await prisma.user.deleteMany({
+      where: { OR: [{ username: 'TestUser' }, { email: testUserEmail }] },
+    });
+
     const user = await prisma.user.create({
       data: {
         username: 'TestUser',
@@ -27,8 +32,8 @@ describe('Auth Routes', () => {
   });
 
   afterEach(async () => {
-    // Clean up test user
-    await prisma.user.delete({ where: { id: testUserId } });
+    // deleteMany: never throws when the row is already gone (aborted-run safety)
+    await prisma.user.deleteMany({ where: { id: testUserId } });
   });
 
   describe('POST /api/auth/login', () => {

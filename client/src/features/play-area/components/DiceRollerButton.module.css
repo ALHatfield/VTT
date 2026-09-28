@@ -33,8 +33,9 @@
 .menu {
   position: absolute;
   bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+  /* Align to the button's left edge — the anchor sits bottom-left of the canvas,
+     so centering would overflow past the canvas boundary */
+  left: 0;
   background: rgba(16, 24, 48, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 10px;
@@ -115,5 +116,29 @@
 .rollBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ── Settings section (Phase PM1) ── */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.settingRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 0.78rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settingRow input {
+  cursor: pointer;
 }
 
