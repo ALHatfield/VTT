@@ -3,16 +3,24 @@ import type { FormEvent, ReactElement } from 'react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { useCampaign } from '../../shared/context/CampaignContext';
+import { useAuth } from '../auth/AuthContext';
+import { CharacterCards } from '../characters/components/CharacterCards';
+import { MemberLinkControls } from '../characters/components/MemberLinkControls';
+import { useCharacterActions } from '../characters/hooks/useCharacterActions';
+import { useCharacterLinking } from '../characters/hooks/useCharacterLinking';
+import { useCharacters } from '../characters/hooks/useCharacters';
+import { useCharacterSocket } from '../characters/hooks/useCharacterSocket';
 import styles from './CampaignDetail.module.css';
 import { CampaignForm } from './CampaignForm';
+import { GameSystemBadge } from './GameSystemBadge';
 import { useCampaignActions } from './hooks/useCampaignActions';
-import { useCampaignDetail } from './hooks/useCampaignDetail';
 import { useMemberActions } from './hooks/useMemberActions';
 
 export function CampaignDetail(): ReactElement {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { campaign, isLoading, error, refresh } = useCampaignDetail(id!);
+  const { campaign, isLoading, error, refresh } = useCampaign();
   const { updateCampaign, deleteCampaign } = useCampaignActions();
   const { inviteMember, removeMember, leaveCampaign } = useMemberActions();
 
@@ -31,8 +39,39 @@ export function CampaignDetail(): ReactElement {
 
   const isDm = campaign?.role === 'dm';
 
+  // Character/token linking lives inline in the Members section (characters 6B)
+  const { user } = useAuth();
+  const { characters, refresh: refreshCharacters } = useCharacters(id!);
+  const linking = useCharacterLinking(id!);
+  const { updateCharacter } = useCharacterActions();
+
+  useCharacterSocket({
+    campaignId: id,
+    onHpUpdated: refreshCharacters,
+    onLinkUpdated: () => {
+      refreshCharacters();
+      linking.refresh();
+    },
+    onAssignmentChanged: () => {
+      refreshCharacters();
+      linking.refresh();
+    },
+  });
+
+  async function handleAssign(characterId: string, userId: string): Promise<void> {
+    await linking.assign(characterId, userId);
+    refreshCharacters();
+  }
+
+  async function handleSetPortrait(characterId: string, url: string): Promise<void> {
+    await updateCharacter(id!, characterId, { portraitUrl: url });
+    refreshCharacters();
+    linking.refresh();
+  }
+
   async function handleUpdate(payload: Campaign | CampaignUpdatePayload): Promise<void> {
     await updateCampaign(id!, payload as CampaignUpdatePayload);
+    refresh();
     setIsEditing(false);
   }
 
@@ -149,6 +188,7 @@ export function CampaignDetail(): ReactElement {
 
       <div className={styles.titleRow}>
         <h1 className={styles.title}>{campaign.name}</h1>
+        <GameSystemBadge system={campaign.gameSystem} />
         <span className={`${styles.roleBadge} ${styles[`role_${campaign.role}`]}`}>
           {campaign.role.toUpperCase()}
         </span>
@@ -157,6 +197,16 @@ export function CampaignDetail(): ReactElement {
       {campaign.description && (
         <p className={styles.description}>{campaign.description}</p>
       )}
+
+      <div className={styles.navActions}>
+        <button
+          type="button"
+          className={styles.playButton}
+          onClick={() => navigate(`/play/${id}`)}
+        >
+          ▶ Enter Play Area
+        </button>
+      </div>
 
       <section className={styles.membersSection}>
         <h2 className={styles.sectionTitle}>Members</h2>
@@ -168,6 +218,18 @@ export function CampaignDetail(): ReactElement {
               <span className={`${styles.memberRole} ${styles[`role_${member.role}`]}`}>
                 {member.role.toUpperCase()}
               </span>
+              {member.role !== 'observer' && (isDm || member.userId === user?.id) && (
+                <MemberLinkControls
+                  member={member}
+                  isDm={isDm}
+                  members={campaign.members}
+                  characters={characters}
+                  links={linking.links}
+                  onUnlink={linking.unlink}
+                  onAssign={handleAssign}
+                  onSetPortrait={handleSetPortrait}
+                />
+              )}
               {isDm && member.role !== 'dm' && (
                 <button
                   type="button"
@@ -223,6 +285,11 @@ export function CampaignDetail(): ReactElement {
             </button>
           </div>
         )}
+      </section>
+
+      <section className={styles.membersSection}>
+        <h2 className={styles.sectionTitle}>Characters</h2>
+        <CharacterCards campaignId={id!} characters={characters} />
       </section>
     </div>
   );

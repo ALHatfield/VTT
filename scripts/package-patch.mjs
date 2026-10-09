@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { deflateRawSync } from 'node:zlib';
 
@@ -14,19 +23,26 @@ const USAGE = [
   '',
   'Options:',
   '  -o, --output   Output zip path (default: handoff/vtt-changes-<timestamp>.zip)',
+  '  --full         Package the ENTIRE project state (every non-ignored file) as a',
+  '                 snapshot instead of a diff. Apply it with patch:force to make the',
+  '                 receiving project match exactly, regardless of their commit.',
   '  -h, --help     Show this help',
   '',
   'Examples:',
   '  npm run patch:package',
   '  npm run patch:package -- -o my-feature.zip',
   '  npm run patch:package -- -- client/src/features/editor',
+  '  npm run patch:snapshot',
 ].join('\n');
 
 const PATCH_NAME = 'vtt-changes.patch';
+const SNAPSHOT_NAME = 'vtt-snapshot.bundle';
+const SNAPSHOT_REF = 'refs/vtt-snapshot/latest';
 
 function parseArgs() {
   const args = process.argv.slice(2);
   let output = null;
+  let full = false;
   const pathspecs = [];
 
   for (let i = 0; i < args.length; i += 1) {
@@ -34,6 +50,8 @@ function parseArgs() {
     if (arg === '-h' || arg === '--help') {
       console.log(USAGE);
       process.exit(0);
+    } else if (arg === '--full') {
+      full = true;
     } else if (arg === '-o' || arg === '--output') {
       output = args[i + 1];
       if (!output) {
@@ -49,7 +67,12 @@ function parseArgs() {
     }
   }
 
-  return { output, pathspecs };
+  if (full && pathspecs.length > 0) {
+    console.error('--full snapshots the whole project and cannot be combined with pathspecs.');
+    process.exit(1);
+  }
+
+  return { output, full, pathspecs };
 }
 
 function git(gitArgs, options = {}) {
@@ -86,6 +109,44 @@ function buildPatch(pathspecs) {
   }
 
   return { patch: trackedDiff + untrackedDiff, untrackedCount: untracked.length };
+}
+
+// Captures the working tree as a parentless commit in a git bundle, so it has no prerequisite commits.
+function buildSnapshot() {
+  const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'vtt-snapshot-'));
+  const tempIndex = path.join(tmpDir, 'index');
+  const bundlePath = path.join(tmpDir, SNAPSHOT_NAME);
+  const env = {
+    ...process.env,
+    GIT_INDEX_FILE: tempIndex,
+    GIT_AUTHOR_NAME: 'vtt-snapshot',
+    GIT_AUTHOR_EMAIL: 'vtt-snapshot@localhost',
+    GIT_COMMITTER_NAME: 'vtt-snapshot',
+    GIT_COMMITTER_EMAIL: 'vtt-snapshot@localhost',
+  };
+
+  try {
+    // Seeding from the real index reuses its stat cache so `add -A` only rehashes changed files.
+    const realIndex = git(['rev-parse', '--git-path', 'index']).trim();
+    if (existsSync(realIndex)) copyFileSync(realIndex, tempIndex);
+
+    git(['add', '-A'], { env, stdio: 'pipe' });
+    const tree = git(['write-tree'], { env }).trim();
+    const base = git(['rev-parse', 'HEAD']).trim();
+    const commit = git(['commit-tree', tree, '-m', `vtt snapshot\n\nbase: ${base}`], { env }).trim();
+
+    git(['update-ref', SNAPSHOT_REF, commit]);
+    try {
+      git(['bundle', 'create', bundlePath, SNAPSHOT_REF], { stdio: 'pipe' });
+    } finally {
+      git(['update-ref', '-d', SNAPSHOT_REF]);
+    }
+
+    const fileCount = git(['ls-tree', '-r', '--name-only', tree]).split('\n').filter(Boolean).length;
+    return { bundle: readFileSync(bundlePath), fileCount, base };
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
 }
 
 const CRC_TABLE = (() => {
@@ -162,7 +223,7 @@ function createZip(entryName, data) {
 }
 
 function main() {
-  const { output, pathspecs } = parseArgs();
+  const { output, full, pathspecs } = parseArgs();
 
   try {
     git(['rev-parse', '--is-inside-work-tree'], { stdio: 'pipe' });
@@ -171,18 +232,32 @@ function main() {
     process.exit(1);
   }
 
+  const timestamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
+  const defaultName = full ? `vtt-snapshot-${timestamp}.zip` : `vtt-changes-${timestamp}.zip`;
+  const zipPath = output ?? path.join('handoff', defaultName);
+  const zipDir = path.dirname(zipPath);
+  if (zipDir !== '.' && !existsSync(zipDir)) {
+    mkdirSync(zipDir, { recursive: true });
+  }
+
+  if (full) {
+    const { bundle, fileCount, base } = buildSnapshot();
+    const snapshotZip = createZip(SNAPSHOT_NAME, bundle);
+    writeFileSync(zipPath, snapshotZip);
+
+    console.log(`Packaged full project snapshot: ${fileCount} file(s), base ${base.slice(0, 7)}.`);
+    console.log(`  ${zipPath} (${(snapshotZip.length / 1024).toFixed(1)} KB)`);
+    console.log('');
+    console.log('To apply on the other end:');
+    console.log(`  npm run patch:force -- ${zipPath}`);
+    return;
+  }
+
   const { patch, untrackedCount } = buildPatch(pathspecs);
 
   if (patch.trim().length === 0) {
     console.log('No uncommitted changes found — nothing to package.');
     process.exit(0);
-  }
-
-  const timestamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
-  const zipPath = output ?? path.join('handoff', `vtt-changes-${timestamp}.zip`);
-  const zipDir = path.dirname(zipPath);
-  if (zipDir !== '.' && !existsSync(zipDir)) {
-    mkdirSync(zipDir, { recursive: true });
   }
 
   const zipBuffer = createZip(PATCH_NAME, Buffer.from(patch, 'utf8'));

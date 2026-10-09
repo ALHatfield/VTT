@@ -153,4 +153,57 @@ describe('useTilePlacements', () => {
 
     expect(result.current.placements).toHaveLength(0);
   });
+
+  it('merges consecutive debounced payloads for the same placement', async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ data: [makePlacement()] }) });
+    const { result } = renderHook(() => useTilePlacements('campaign-1', 'scene-1'));
+    await waitFor(() => expect(result.current.placements).toHaveLength(1));
+
+    vi.useFakeTimers();
+    const patchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    mockFetch.mockImplementation((url: string, opts?: RequestInit) => {
+      if ((opts as RequestInit | undefined)?.method === 'PATCH') return patchMock(url, opts);
+      return Promise.resolve({ ok: true, json: async () => ({ data: [makePlacement()] }) });
+    });
+
+    act(() => {
+      result.current.updatePlacement('p-1', { x: 50, y: 60 });
+      result.current.updatePlacement('p-1', { rotation: 90 });
+    });
+    await act(async () => {
+      vi.runAllTimers();
+    });
+
+    expect(patchMock).toHaveBeenCalledTimes(1);
+    const [, opts] = patchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(opts.body as string)).toEqual({ x: 50, y: 60, rotation: 90 });
+  });
+
+  it('flushes pending debounced edits to the originating scene when the scene changes', async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ data: [makePlacement()] }) });
+    const { result, rerender } = renderHook(
+      ({ sceneId }: { sceneId: string }) => useTilePlacements('campaign-1', sceneId),
+      { initialProps: { sceneId: 'scene-1' } },
+    );
+    await waitFor(() => expect(result.current.placements).toHaveLength(1));
+
+    const patchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    mockFetch.mockImplementation((url: string, opts?: RequestInit) => {
+      if ((opts as RequestInit | undefined)?.method === 'PATCH') return patchMock(url, opts);
+      return Promise.resolve({ ok: true, json: async () => ({ data: [] }) });
+    });
+
+    act(() => {
+      result.current.updatePlacement('p-1', { x: 500 });
+    });
+    expect(patchMock).not.toHaveBeenCalled();
+
+    // Switching the edited scene flushes the pending write immediately — to the OLD scene's URL
+    rerender({ sceneId: 'scene-2' });
+
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
+    const [url, opts] = patchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/campaigns/campaign-1/scenes/scene-1/placements/p-1');
+    expect(JSON.parse(opts.body as string)).toEqual({ x: 500 });
+  });
 });

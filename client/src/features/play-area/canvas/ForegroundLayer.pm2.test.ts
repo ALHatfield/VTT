@@ -228,6 +228,20 @@ describe('ForegroundLayer — PM2 mask pipeline', () => {
     expect(internals(layer).shroudOverlay?._fills.at(-1)?.alpha).toBe(0.4);
   });
 
+  it('adds peripheral circles to the explored mask and forces shroud/darkness opacities', () => {
+    layer.setFogMaskConfig(
+      makeConfig({ peripheralVisionRadius: 2.5, peripheralShroudAlpha: 0.8, hiddenAlpha: 0.5 }),
+    );
+    layer.setTokenVisionReveals([makeReveal()], 64);
+
+    const [active, explored] = calls.slice(-2);
+    expect(active.circles).toHaveLength(1);
+    expect(explored.circles).toHaveLength(2);
+    expect(explored.circles[1]?.r).toBe(2.5 * 64 * DEFAULT_FOG_MASK_CONFIG.maskResolutionScale);
+    expect(internals(layer).hiddenOverlay?._fills.at(-1)?.alpha).toBe(1);
+    expect(internals(layer).shroudOverlay?._fills.at(-1)?.alpha).toBe(0.8);
+  });
+
   it('scales mask sprites by the inverse mask scale so reveals stay pinned to world space', () => {
     layer.setFogMaskConfig(makeConfig({ maskResolutionScale: 0.5 }));
     layer.setTokenVisionReveals([makeReveal()], 64);
@@ -262,6 +276,28 @@ describe('ForegroundLayer — PM2 mask pipeline', () => {
     layer.setTokenVisionReveals([makeReveal(), makeReveal({ tokenId: 'tok-2', x: 8 })], 64);
 
     expect(calls.at(-1)?.circles).toHaveLength(2);
+  });
+
+  it('composes LOS polygons into both masks in place of the emitter circle (PM3)', () => {
+    layer.setFogMaskConfig(makeConfig({ explorationMode: 'persistent' }));
+    layer.setTokenVisionReveals([makeReveal(), makeReveal({ tokenId: 'tok-2', x: 8 })], 64);
+    layer.setVisibilityPolygons([
+      {
+        emitterId: 'tok-1',
+        source: 'token',
+        partyVisible: true,
+        sceneId: 'scene-1',
+        origin: { x: 160, y: 224 },
+        radius: 384,
+        points: makeRegion().vertices,
+      },
+    ]);
+
+    const [active, explored] = calls.slice(-2);
+    expect(active.circles).toHaveLength(1);
+    expect(explored.circles).toHaveLength(1);
+    // Remaining circle is tok-2, in mask space (default 0.5 resolution scale)
+    expect(active.circles[0]?.x).toBe((8 * 64 + 32) * DEFAULT_FOG_MASK_CONFIG.maskResolutionScale);
   });
 
   it('hides the mask overlay in the DM (unobfuscated) view', () => {

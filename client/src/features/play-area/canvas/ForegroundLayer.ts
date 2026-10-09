@@ -1,17 +1,29 @@
 import { AlphaFilter, Container, Graphics, Sprite } from 'pixi.js';
 
 import type {
-  FogMaskConfig,
-  FogRegion,
-  FogVertex,
-  TokenVisionReveal,
-  VisionStamp,
+    FogMaskConfig,
+    FogRegion,
+    FogVertex,
+    TokenVisionReveal,
+    VisibilityPolygon,
+    VisionStamp,
 } from '@vtt/shared';
-import { DEFAULT_FOG_MASK_CONFIG, FOG_OVERLAY_ALPHA, FOG_OVERLAY_COLOR } from '@vtt/shared';
+import {
+    DEFAULT_FOG_MASK_CONFIG,
+    FOG_OVERLAY_ALPHA,
+    FOG_OVERLAY_COLOR,
+    PERIPHERAL_DARKNESS_ALPHA,
+} from '@vtt/shared';
 
 import type { TilePlacementSprite } from './TilePlacementSprite';
 import { FogMaskService, type FogMaskRenderer } from './fog/FogMaskService';
-import { resolveExploredStamps, visionRevealsToStamps } from './fog/fog-mask-math';
+import {
+    buildPeripheralStamps,
+    resolveActiveVision,
+    resolveExploredStamps,
+    type ActiveVision,
+} from './fog/fog-mask-math';
+import { applyMapClip, type MapClipBounds } from './map-clip';
 
 /**
  * ForegroundLayer — highest z-index.
@@ -23,6 +35,9 @@ import { resolveExploredStamps, visionRevealsToStamps } from './fog/fog-mask-mat
  *   fogContainer (filters=[AlphaFilter(1)] — forces isolated render texture)
  *     ├─ fogOverlay  – solid dark rect covering the whole map
  *     └─ fogCutouts  – blendMode='erase'; draws revealed polygons + vision circles
+ *   peripheralContainer (isolated, peripheral vision only)
+ *     ├─ peripheralOverlay – opaque rect
+ *     └─ peripheralCutouts – erases reveals + wall-ignoring peripheral circles
  *
  * `pm2` (Phase PM2) — GPU RenderTexture mask compositing:
  *   pm2Container
@@ -44,10 +59,14 @@ export class ForegroundLayer extends Container {
   private readonly fogContainer: Container;
   private readonly fogOverlay: Graphics;
   private readonly fogCutouts: Graphics;
+  private readonly peripheralContainer: Container;
+  private readonly peripheralOverlay: Graphics;
+  private readonly peripheralCutouts: Graphics;
   private readonly fogDebug: Graphics;
   private readonly brushPreview: Graphics;
   private readonly pm2Container: Container;
   private readonly tilePlacementsContainer: Container;
+  private readonly tileClipMask: Graphics;
   private readonly tileSpriteMap = new Map<string, TilePlacementSprite>();
 
   private maskService: FogMaskService | null = null;
@@ -59,9 +78,12 @@ export class ForegroundLayer extends Container {
   private mapWidth = 0;
   private mapHeight = 0;
   private obfuscateForPlayer = true;
+  // Editor mode shows the whole map regardless of fog state or DM preview mode
+  private fogSuppressed = false;
 
   private currentRegions: FogRegion[] = [];
   private currentReveals: TokenVisionReveal[] = [];
+  private visibilityPolygons: VisibilityPolygon[] = [];
   private currentCellSize = 64;
   private fogConfig: FogMaskConfig = { ...DEFAULT_FOG_MASK_CONFIG };
   private explorationStamps: VisionStamp[] = [];
@@ -93,6 +115,21 @@ export class ForegroundLayer extends Container {
     this.fogContainer.addChild(this.fogOverlay);
     this.fogContainer.addChild(this.fogCutouts);
 
+    this.peripheralContainer = new Container();
+    this.peripheralContainer.filters = [new AlphaFilter({ alpha: 1 })];
+    this.peripheralContainer.eventMode = 'none';
+    this.peripheralContainer.visible = false;
+
+    this.peripheralOverlay = new Graphics();
+    this.peripheralOverlay.eventMode = 'none';
+
+    this.peripheralCutouts = new Graphics();
+    this.peripheralCutouts.eventMode = 'none';
+    this.peripheralCutouts.blendMode = 'erase';
+
+    this.peripheralContainer.addChild(this.peripheralOverlay);
+    this.peripheralContainer.addChild(this.peripheralCutouts);
+
     // PM2 mask groups are populated lazily once a renderer is attached.
     this.pm2Container = new Container();
     this.pm2Container.eventMode = 'none';
@@ -102,11 +139,16 @@ export class ForegroundLayer extends Container {
     this.tilePlacementsContainer = new Container();
     this.tilePlacementsContainer.sortableChildren = true;
 
+    this.tileClipMask = new Graphics();
+    this.tileClipMask.eventMode = 'none';
+
     this.addChild(this.fogContainer);
+    this.addChild(this.peripheralContainer);
     this.addChild(this.pm2Container);
     this.addChild(this.fogDebug);
     this.addChild(this.brushPreview);
     this.addChild(this.tilePlacementsContainer);
+    this.addChild(this.tileClipMask);
   }
 
   /**
@@ -184,6 +226,13 @@ export class ForegroundLayer extends Container {
     this.setObfuscationEnabled(mode === 'player');
   }
 
+  /** Hide all fog (and DM fog guides) without discarding fog state. */
+  setFogSuppressed(suppressed: boolean): void {
+    if (this.fogSuppressed === suppressed) return;
+    this.fogSuppressed = suppressed;
+    this.redrawAll();
+  }
+
   setBrushPreview(vertices: FogVertex[] | null): void {
     this.brushPreview.clear();
     if (!vertices || vertices.length < 3) return;
@@ -210,6 +259,15 @@ export class ForegroundLayer extends Container {
     this.redrawAll();
   }
 
+  /**
+   * Line-of-sight polygons (Phase PM3). A reveal with a matching polygon is
+   * drawn as that polygon instead of its circle, in both fog renderers.
+   */
+  setVisibilityPolygons(polygons: VisibilityPolygon[]): void {
+    this.visibilityPolygons = polygons;
+    this.redrawAll();
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
@@ -217,12 +275,21 @@ export class ForegroundLayer extends Container {
   private redrawAll(): void {
     this.fogOverlay.clear();
     this.fogCutouts.clear();
+    this.peripheralOverlay.clear();
+    this.peripheralCutouts.clear();
+    this.peripheralContainer.visible = false;
     this.fogDebug.clear();
 
     const usePm2 = this.fogConfig.fogMode === 'pm2' && this.maskService !== null;
     this.pm2Container.visible = false;
 
     if (this.mapWidth <= 0 || this.mapHeight <= 0) return;
+
+    if (this.fogSuppressed) {
+      this.fogContainer.visible = false;
+      this.fogDebug.visible = false;
+      return;
+    }
 
     this.pm2Container.visible = usePm2 && this.obfuscateForPlayer;
 
@@ -241,26 +308,40 @@ export class ForegroundLayer extends Container {
       this.fogContainer.visible = true;
       this.fogDebug.visible = false;
 
+      const peripheral = this.fogConfig.peripheralVisionRadius > 0;
+
       // Fog overlay — solid dark rect covering the entire map.
       this.fogOverlay
         .rect(0, 0, this.mapWidth, this.mapHeight)
-        .fill({ color: FOG_OVERLAY_COLOR, alpha: FOG_OVERLAY_ALPHA });
+        .fill({
+          color: FOG_OVERLAY_COLOR,
+          alpha: peripheral ? this.fogConfig.peripheralShroudAlpha : FOG_OVERLAY_ALPHA,
+        });
 
       // Erase-blend cutouts — rendered inside the filter-isolated fogContainer
       // texture, so erase only removes fogOverlay pixels (not the main scene).
+      const vision = resolveActiveVision(
+        this.currentReveals,
+        this.visibilityPolygons,
+        this.currentCellSize,
+      );
+      this.drawRevealCutouts(this.fogCutouts, vision);
 
-      // DM-drawn fog region reveals
-      for (const region of this.currentRegions) {
-        if (region.vertices.length < 3) continue;
-        this.drawPolygon(this.fogCutouts, region.vertices, 0xffffff, 1);
-      }
-
-      // Token vision circles
-      for (const reveal of this.currentReveals) {
-        const centerX = reveal.x * this.currentCellSize + this.currentCellSize / 2;
-        const centerY = reveal.y * this.currentCellSize + this.currentCellSize / 2;
-        const radius = reveal.visionRadius * this.currentCellSize;
-        this.fogCutouts.circle(centerX, centerY, radius).fill({ color: 0xffffff, alpha: 1 });
+      if (peripheral) {
+        this.peripheralContainer.visible = true;
+        this.peripheralOverlay
+          .rect(0, 0, this.mapWidth, this.mapHeight)
+          .fill({ color: FOG_OVERLAY_COLOR, alpha: PERIPHERAL_DARKNESS_ALPHA });
+        this.drawRevealCutouts(this.peripheralCutouts, vision);
+        for (const stamp of buildPeripheralStamps(
+          this.currentReveals,
+          this.fogConfig.peripheralVisionRadius,
+          this.currentCellSize,
+        )) {
+          this.peripheralCutouts
+            .circle(stamp.x, stamp.y, stamp.radius)
+            .fill({ color: 0xffffff, alpha: 1 });
+        }
       }
 
       return;
@@ -268,6 +349,20 @@ export class ForegroundLayer extends Container {
 
     this.fogContainer.visible = false;
     this.drawDmGuides();
+  }
+
+  /** DM-drawn regions, then token vision (LOS polygons where obstructed, circles elsewhere). */
+  private drawRevealCutouts(target: Graphics, vision: ActiveVision): void {
+    for (const region of this.currentRegions) {
+      if (region.vertices.length < 3) continue;
+      this.drawPolygon(target, region.vertices, 0xffffff, 1);
+    }
+    for (const points of vision.polygons) {
+      this.drawPolygon(target, points, 0xffffff, 1);
+    }
+    for (const stamp of vision.stamps) {
+      target.circle(stamp.x, stamp.y, stamp.radius).fill({ color: 0xffffff, alpha: 1 });
+    }
   }
 
   /** DM view: no fog, just guide outlines for drawn regions. */
@@ -293,24 +388,48 @@ export class ForegroundLayer extends Container {
 
     maskService.resize(this.mapWidth, this.mapHeight);
 
-    const activeStamps = visionRevealsToStamps(this.currentReveals, this.currentCellSize);
-    const exploredStamps = resolveExploredStamps(
-      this.fogConfig,
-      activeStamps,
-      this.explorationStamps,
+    const vision = resolveActiveVision(
+      this.currentReveals,
+      this.visibilityPolygons,
+      this.currentCellSize,
     );
+    const peripheral = this.fogConfig.peripheralVisionRadius > 0;
+    // Peripheral circles join the explored mask: that area drops to the shroud
+    // tint while the hidden layer (forced opaque) blacks out everything else.
+    const peripheralStamps = peripheral
+      ? buildPeripheralStamps(
+          this.currentReveals,
+          this.fogConfig.peripheralVisionRadius,
+          this.currentCellSize,
+        )
+      : [];
+    const exploredStamps = [
+      ...resolveExploredStamps(this.fogConfig, vision.stamps, this.explorationStamps),
+      ...peripheralStamps,
+    ];
 
-    maskService.update({ activeStamps, exploredStamps, regions: this.currentRegions });
+    maskService.update({
+      activeStamps: vision.stamps,
+      exploredStamps,
+      regions: this.currentRegions,
+      visibilityPolygons: vision.polygons,
+    });
 
     hiddenOverlay
       .clear()
       .rect(0, 0, this.mapWidth, this.mapHeight)
-      .fill({ color: FOG_OVERLAY_COLOR, alpha: this.fogConfig.hiddenAlpha });
+      .fill({
+        color: FOG_OVERLAY_COLOR,
+        alpha: peripheral ? PERIPHERAL_DARKNESS_ALPHA : this.fogConfig.hiddenAlpha,
+      });
 
     shroudOverlay
       .clear()
       .rect(0, 0, this.mapWidth, this.mapHeight)
-      .fill({ color: FOG_OVERLAY_COLOR, alpha: this.fogConfig.shroudAlpha });
+      .fill({
+        color: FOG_OVERLAY_COLOR,
+        alpha: peripheral ? this.fogConfig.peripheralShroudAlpha : this.fogConfig.shroudAlpha,
+      });
 
     // Masks are authored at maskScale; scale the sprites back up to world size so
     // the reveal stays pinned to world coordinates under pan and zoom.
@@ -360,6 +479,16 @@ export class ForegroundLayer extends Container {
   // ---------------------------------------------------------------------------
   // Tile placement management
   // ---------------------------------------------------------------------------
+
+  /** Hide tile art outside the map rectangle; null removes the clip. */
+  setTileClip(bounds: MapClipBounds | null): void {
+    applyMapClip(this.tilePlacementsContainer, this.tileClipMask, bounds);
+  }
+
+  /** Foreground tile art only (no fog) — snapshot target for editor 5H thumbnails. */
+  get tilePlacementsView(): Container {
+    return this.tilePlacementsContainer;
+  }
 
   addTilePlacement(sprite: TilePlacementSprite): void {
     this.removeTilePlacement(sprite.placementId);

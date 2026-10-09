@@ -5,10 +5,11 @@ applyTo: "**/features/play-area/**,**/features/editor/**"
 # Canvas Conventions (PixiJS)
 
 ## Layer Architecture
-The canvas uses three main PixiJS Containers as layers, rendered in order:
+The canvas uses four PixiJS Containers as layers, rendered in order:
 1. **BackgroundLayer**: Static map/tile images — lowest z-index
-2. **PlaygroundLayer**: Grid overlay and interactive tokens (player, monster, NPC, misc)
-3. **ForegroundLayer**: Fog of war, weather effects, lighting overlays — highest z-index
+2. **LightLayer** (PM4): Additive tinted light glow — above the map, below tokens
+3. **PlaygroundLayer**: Grid overlay and interactive tokens (player, monster, NPC, misc)
+4. **ForegroundLayer**: Fog of war, weather effects — highest z-index; fog always composites over light so lighting never reveals hidden areas
 
 Each layer is a class extending `PIXI.Container`, managed by a central `CanvasManager`.
 
@@ -17,6 +18,9 @@ Each layer is a class extending `PIXI.Container`, managed by a central `CanvasMa
 Stage (PIXI.Application.stage)
 ├── BackgroundLayer (Container)
 │   └── MapTiles(s)
+├── LightLayer (Container)
+│   ├── Glow sprites (additive, shared gradient textures)
+│   └── Ember graphics
 ├── PlaygroundLayer (Container)
 │   ├── GridOverlay
 │   └── TokenContainer
@@ -26,8 +30,7 @@ Stage (PIXI.Application.stage)
 └── ForegroundLayer (Container)
     ├── FogOfWar
     ├── WeatherEffects
-    ├── SpecialEffects
-    └── LightingOverlay
+    └── SpecialEffects
 ```
 
 ## Token System

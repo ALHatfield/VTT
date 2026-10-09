@@ -43,6 +43,8 @@ export class TokenSprite extends Container {
   private readonly snapHighlight: Graphics;
   private readonly dragLine: Graphics;
   private readonly hpBar: Graphics;
+  /** Drag preview graphics; PlaygroundLayer mounts this in the overlay so it draws above fog, doors, and tiles. */
+  readonly dragPreview: Container;
   /** Subtype badge ("A" / "E") shown inside the circle for ally/enemy NPC tokens */
   private readonly npcSubtypeLabel: Text | null;
   /** Optional bitmap portrait rendered on top of the circle when token.iconUrl is set. */
@@ -85,17 +87,20 @@ export class TokenSprite extends Container {
     const cx = tokenSize / 2;
     const cy = tokenSize / 2;
 
-    // Snap highlight — light-blue grid cell rectangle at drop destination (rendered first, behind token)
+    this.dragPreview = new Container();
+    this.dragPreview.eventMode = 'none';
+
+    // Snap highlight — light-blue grid cell rectangle at drop destination
     this.snapHighlight = new Graphics();
     this.snapHighlight.visible = false;
     this.snapHighlight.eventMode = 'none';
-    this.addChild(this.snapHighlight);
+    this.dragPreview.addChild(this.snapHighlight);
 
     // Drag line — dashed line from token origin to snap destination
     this.dragLine = new Graphics();
     this.dragLine.visible = false;
     this.dragLine.eventMode = 'none';
-    this.addChild(this.dragLine);
+    this.dragPreview.addChild(this.dragLine);
 
     this.auraLayer = new Graphics();
     this.auraLayer.eventMode = 'none';
@@ -140,7 +145,7 @@ export class TokenSprite extends Container {
     this.ghostIndicator.stroke({ color: 0x64c8ff, width: 2, alpha: 0.6 });
     this.ghostIndicator.visible = false;
     this.ghostIndicator.eventMode = 'none';
-    this.addChild(this.ghostIndicator);
+    this.dragPreview.addChild(this.ghostIndicator);
 
     // Name label below the token circle
     const labelStyle = new TextStyle({
@@ -354,7 +359,7 @@ export class TokenSprite extends Container {
         this.iconSprite = sprite;
         this.iconMask = mask;
         // Insert image + mask directly above the colored circle, below overlays
-        // (ghost, HP bar, NPC badge, name label are added after this in the constructor).
+        // (HP bar, NPC badge, name label are added after this in the constructor).
         const circleIdx = this.getChildIndex(this.circle);
         this.addChildAt(mask, circleIdx + 1);
         this.addChildAt(sprite, circleIdx + 2);
@@ -385,6 +390,8 @@ export class TokenSprite extends Container {
     // Record where we started (for drag threshold + revert)
     this.originX = this.x;
     this.originY = this.y;
+    this.dragPreview.x = this.x;
+    this.dragPreview.y = this.y;
     this.dragStartX = event.global.x;
     this.dragStartY = event.global.y;
 
@@ -556,6 +563,7 @@ export class TokenSprite extends Container {
     this.off('globalpointermove', this.handlePointerMove, this);
     this.off('pointerup', this.handlePointerUp, this);
     this.off('pointerupoutside', this.handlePointerUp, this);
+    this.dragPreview.destroy({ children: true });
     super.destroy({ children: true });
   }
 }

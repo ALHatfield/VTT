@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { BCRYPT_ROUNDS, PLAYER_COLOR_PALETTE } from '@vtt/shared';
+import { BCRYPT_ROUNDS, LIGHT_PRESETS, PLAYER_COLOR_PALETTE } from '@vtt/shared';
 import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -95,11 +95,13 @@ async function main(): Promise<void> {
     update: {
       name: "Dragon's Lair",
       description: 'A perilous dungeon crawl — seed campaign for testing.',
+      gameSystem: 'dnd5e',
     },
     create: {
       id: SEED_CAMPAIGN_ID,
       name: "Dragon's Lair",
       description: 'A perilous dungeon crawl — seed campaign for testing.',
+      gameSystem: 'dnd5e',
     },
   });
 
@@ -417,13 +419,29 @@ async function main(): Promise<void> {
     },
   });
 
-  console.log('Seeding sample characters...');
+  console.log('Seeding global template characters (Phase 6B)...');
+
+  // campaignId null = global template, visible in every campaign and cloned on link/assign
+  // Spell entries for the wizard template (Phase 6D) — fixed UUIDs for idempotent upserts
+  const ELARA_SPELLS = [
+    { id: '6d000000-0000-4000-8000-000000000001', name: 'Fire Bolt', level: 0, prepared: true },
+    { id: '6d000000-0000-4000-8000-000000000002', name: 'Mage Hand', level: 0, prepared: true },
+    { id: '6d000000-0000-4000-8000-000000000003', name: 'Magic Missile', level: 1, prepared: true },
+    { id: '6d000000-0000-4000-8000-000000000004', name: 'Shield', level: 1, prepared: true },
+    { id: '6d000000-0000-4000-8000-000000000005', name: 'Misty Step', level: 2, prepared: false },
+    { id: '6d000000-0000-4000-8000-000000000006', name: 'Fireball', level: 3, prepared: true },
+  ];
+  const ELARA_SPELL_SLOTS = [
+    { level: 1, max: 4, used: 0 },
+    { level: 2, max: 3, used: 0 },
+    { level: 3, max: 2, used: 0 },
+  ];
 
   const SEED_CHARACTERS = [
     {
       id: 'char-seed-001',
-      campaignId: SEED_CAMPAIGN_ID,
-      userId: 'player-seed-user-001',
+      campaignId: null,
+      userId: 'dm-seed-user-001',
       name: 'Thorin Ironforge',
       race: 'Dwarf',
       class: 'Fighter',
@@ -444,8 +462,8 @@ async function main(): Promise<void> {
     },
     {
       id: 'char-seed-002',
-      campaignId: SEED_CAMPAIGN_ID,
-      userId: 'player-seed-user-002',
+      campaignId: null,
+      userId: 'dm-seed-user-001',
       name: 'Elara Nightwhisper',
       race: 'Elf',
       class: 'Wizard',
@@ -463,11 +481,13 @@ async function main(): Promise<void> {
       ac: 12,
       proficiencyBonus: 3,
       speed: 30,
+      spells: ELARA_SPELLS,
+      spellSlots: ELARA_SPELL_SLOTS,
     },
     {
       id: 'char-seed-003',
-      campaignId: SEED_CAMPAIGN_ID,
-      userId: 'player-seed-user-003',
+      campaignId: null,
+      userId: 'dm-seed-user-001',
       name: 'Rix Shadowstep',
       race: 'Halfling',
       class: 'Rogue',
@@ -492,6 +512,8 @@ async function main(): Promise<void> {
     await prisma.character.upsert({
       where: { id: c.id },
       update: {
+        campaignId: c.campaignId,
+        userId: c.userId,
         name: c.name,
         race: c.race,
         class: c.class,
@@ -502,11 +524,18 @@ async function main(): Promise<void> {
         ac: c.ac,
         proficiencyBonus: c.proficiencyBonus,
         speed: c.speed,
+        spells: 'spells' in c ? c.spells : [],
+        spellSlots: 'spellSlots' in c ? c.spellSlots : [],
       },
       create: c,
     });
-    console.log(`  ✓ Upserted character: ${c.name}`);
+    console.log(`  ✓ Upserted template character: ${c.name}`);
   }
+
+  // Remove any leftover direct links to template characters (templates are cloned on link)
+  await prisma.characterToken.deleteMany({
+    where: { characterId: { in: SEED_CHARACTERS.map((c) => c.id) } },
+  });
 
   console.log('Seeding fog regions...');
   const SEED_FOG_REGIONS = [
@@ -713,6 +742,62 @@ async function main(): Promise<void> {
     },
   });
   console.log('  ✓ Upserted tile placement: tile1.png');
+
+  // ---------------------------------------------------------------------------
+  // Seed wall segments (Phase 5F) — a small room with a door and a window
+  // ---------------------------------------------------------------------------
+  console.log('Seeding wall segments (Phase 5F)...');
+
+  await prisma.wallSegment.deleteMany({ where: { sceneId: SEED_SCENE_ID } });
+
+  const seedWalls = [
+    { id: 'wall-seed-001', x1: 256, y1: 256, x2: 640, y2: 256 },
+    { id: 'wall-seed-002', x1: 640, y1: 256, x2: 640, y2: 512 },
+    { id: 'wall-seed-003', x1: 640, y1: 512, x2: 448, y2: 512 },
+    { id: 'wall-seed-004', x1: 448, y1: 512, x2: 384, y2: 512, isDoor: true },
+    { id: 'wall-seed-005', x1: 384, y1: 512, x2: 256, y2: 512 },
+    { id: 'wall-seed-006', x1: 256, y1: 512, x2: 256, y2: 256, blocksLight: false },
+  ];
+
+  await prisma.wallSegment.createMany({
+    data: seedWalls.map((wall) => ({
+      ...wall,
+      sceneId: SEED_SCENE_ID,
+      campaignId: SEED_CAMPAIGN_ID,
+    })),
+  });
+  console.log(`  ✓ Created ${seedWalls.length} wall segments`);
+
+  // ---------------------------------------------------------------------------
+  // Seed light sources (Phase 5G) — a torch and a beacon inside the walled room
+  // ---------------------------------------------------------------------------
+  console.log('Seeding light sources (Phase 5G)...');
+
+  await prisma.lightSource.deleteMany({ where: { sceneId: SEED_SCENE_ID } });
+
+  const seedLights = [
+    { id: 'light-seed-001', emitterType: 'torch', x: 288, y: 288 },
+    { id: 'light-seed-002', emitterType: 'beacon', x: 544, y: 416 },
+  ] as const;
+
+  await prisma.lightSource.createMany({
+    data: seedLights.map(({ emitterType, ...light }, index) => {
+      const { radius, color, intensity, falloff, animationMode } = LIGHT_PRESETS[emitterType];
+      return {
+        ...light,
+        emitterType,
+        radius,
+        color,
+        intensity,
+        falloff,
+        animationMode,
+        animationSeed: index + 1,
+        sceneId: SEED_SCENE_ID,
+        campaignId: SEED_CAMPAIGN_ID,
+      };
+    }),
+  });
+  console.log(`  ✓ Created ${seedLights.length} light sources`);
 
   console.log('Seed complete.');
 }

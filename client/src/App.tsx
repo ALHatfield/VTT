@@ -9,7 +9,6 @@ import { useDevAutoLogin } from './features/auth/useDevAutoLogin';
 import { CampaignDetail } from './features/campaigns/CampaignDetail';
 import { CampaignList } from './features/campaigns/CampaignList';
 import { CharacterCreate } from './features/characters/CharacterCreate';
-import { CharacterList } from './features/characters/CharacterList';
 import { CharacterSheet } from './features/characters/CharacterSheet';
 import { PlayArea } from './features/play-area/PlayArea';
 import { Account } from './features/portal/Account';
@@ -17,6 +16,7 @@ import { CharactersPlaceholder } from './features/portal/CharactersPlaceholder';
 import { PortalLayout } from './features/portal/PortalLayout';
 import { Welcome } from './features/portal/Welcome';
 import { ErrorBoundary } from './shared/components/ErrorBoundary';
+import { CampaignScope } from './shared/context/CampaignContext';
 
 function AppContent(): ReactElement {
   // Auto-login in development mode
@@ -31,10 +31,12 @@ function AppContent(): ReactElement {
           path="/play/:campaignId"
           element={
             <ProtectedRoute>
-              <PlayArea key={user?.id} />
+              <CampaignScope paramName="campaignId" />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route index element={<PlayArea key={user?.id} />} />
+        </Route>
         <Route
           element={
             <ProtectedRoute>
@@ -44,10 +46,11 @@ function AppContent(): ReactElement {
         >
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/campaigns" element={<CampaignList />} />
-          <Route path="/campaigns/:id" element={<CampaignDetail />} />
-          <Route path="/campaigns/:id/characters" element={<CharacterList />} />
-          <Route path="/campaigns/:id/characters/new" element={<CharacterCreate />} />
-          <Route path="/campaigns/:id/characters/:charId" element={<CharacterSheet />} />
+          <Route path="/campaigns/:id" element={<CampaignScope />}>
+            <Route index element={<CampaignDetail />} />
+            <Route path="characters/new" element={<CharacterCreate />} />
+            <Route path="characters/:charId" element={<CharacterSheet />} />
+          </Route>
           <Route path="/characters" element={<CharactersPlaceholder />} />
           <Route path="/account" element={<Account />} />
         </Route>

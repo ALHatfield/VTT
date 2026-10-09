@@ -11,7 +11,7 @@
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 2B | Activity Feed | Not Started |
+| 2B | Activity Feed | Deferred |
 
 ---
 

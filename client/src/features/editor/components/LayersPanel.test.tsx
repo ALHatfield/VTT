@@ -73,6 +73,65 @@ function defaultProps(
 // ---------------------------------------------------------------------------
 
 describe('LayersPanel', () => {
+  it('turns the wall tool off when leaving the Walls tab', () => {
+    const onDeactivateTool = vi.fn();
+    render(
+      <LayersPanel
+        {...defaultProps({
+          walls: {
+            walls: [],
+            selectedWallId: null,
+            wallsVisible: true,
+            isToolActive: true,
+            snapToGrid: false,
+            error: null,
+            onToggleTool: vi.fn(),
+            onDeactivateTool,
+            onToggleSnap: vi.fn(),
+            onToggleVisibility: vi.fn(),
+            onSelectWall: vi.fn(),
+            onDeleteWall: vi.fn(),
+            onDeleteAll: vi.fn(),
+            onUpdateWall: vi.fn(),
+          },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Walls' }));
+    expect(onDeactivateTool).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('tab', { name: 'BG' }));
+    expect(onDeactivateTool).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the Lights tab only when light props are provided', () => {
+    const { unmount } = render(<LayersPanel {...defaultProps()} />);
+    expect(screen.queryByRole('tab', { name: 'Lights' })).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <LayersPanel
+        {...defaultProps({
+          lights: {
+            lights: [],
+            selectedLightId: null,
+            lightsVisible: true,
+            error: null,
+            weatherPreset: 'none',
+            onToggleVisibility: vi.fn(),
+            onAddPreset: vi.fn(),
+            onSelectLight: vi.fn(),
+            onDeleteLight: vi.fn(),
+            onUpdateLight: vi.fn(),
+            onWeatherPresetChange: vi.fn(),
+          },
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Lights' }));
+    expect(screen.getByRole('list', { name: 'Light presets' })).toBeInTheDocument();
+  });
+
   it('renders the layer tabs', () => {
     render(<LayersPanel {...defaultProps()} />);
     expect(screen.getByRole('tab', { name: 'BG' })).toBeInTheDocument();
@@ -325,5 +384,52 @@ describe('LayersPanel', () => {
     row.focus();
     await userEvent.keyboard('{Enter}');
     expect(onSelectTile).toHaveBeenCalledWith('p-1');
+  });
+
+  it('deletes the selected tiles when Delete or Backspace is pressed in the list', () => {
+    const onDeleteSelectedTiles = vi.fn();
+    const selected = new Set(['p-1']);
+    render(
+      <LayersPanel
+        {...defaultProps({
+          placements: [makePlacement()],
+          assets: new Map([['asset-1', makeAsset()]]),
+          selectedTilePlacementIds: selected,
+          onDeleteSelectedTiles,
+        })}
+      />,
+    );
+    const row = screen.getByRole('option');
+    fireEvent.keyDown(row, { key: 'Delete' });
+    fireEvent.keyDown(row, { key: 'Backspace' });
+    expect(onDeleteSelectedTiles).toHaveBeenCalledTimes(2);
+    expect(onDeleteSelectedTiles).toHaveBeenCalledWith(selected);
+  });
+
+  it('ignores Delete in the list when nothing is selected or a modifier is held', () => {
+    const onDeleteSelectedTiles = vi.fn();
+    const { rerender } = render(
+      <LayersPanel
+        {...defaultProps({
+          placements: [makePlacement()],
+          assets: new Map([['asset-1', makeAsset()]]),
+          onDeleteSelectedTiles,
+        })}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole('option'), { key: 'Delete' });
+
+    rerender(
+      <LayersPanel
+        {...defaultProps({
+          placements: [makePlacement()],
+          assets: new Map([['asset-1', makeAsset()]]),
+          selectedTilePlacementIds: new Set(['p-1']),
+          onDeleteSelectedTiles,
+        })}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole('option'), { key: 'Backspace', metaKey: true });
+    expect(onDeleteSelectedTiles).not.toHaveBeenCalled();
   });
 });

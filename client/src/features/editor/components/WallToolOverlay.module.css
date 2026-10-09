@@ -1,0 +1,11 @@
+/* WallToolOverlay — Phase 5F */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  cursor: crosshair;
+  touch-action: none;
+  /* Focused only so Delete/Enter route here; the crosshair is the affordance */
+  outline: none;
+}

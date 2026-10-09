@@ -7,9 +7,14 @@ import { Server as SocketIOServer } from 'socket.io';
 import { authRouter } from './features/auth/auth.routes.js';
 import { devRouter } from './features/auth/dev.routes.js';
 import { campaignRouter } from './features/campaigns/campaigns.routes.js';
+import { characterTokensRouter } from './features/characters/character-tokens.routes.js';
 import { characterRouter } from './features/characters/characters.routes.js';
 import { editorRouter, placementsRouter } from './features/editor/editor.routes.js';
+import { lightsRouter } from './features/editor/lights.routes.js';
+import { scenesRouter } from './features/editor/scenes.routes.js';
+import { wallsRouter } from './features/editor/walls.routes.js';
 import { fogRouter } from './features/play-area/fog.routes.js';
+import { lightingRouter } from './features/play-area/lighting.routes.js';
 import { messagesRouter } from './features/play-area/messages.routes.js';
 import { playAreaRouter } from './features/play-area/tokens.routes.js';
 import { prisma } from './shared/db/prisma.js';
@@ -68,11 +73,16 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/campaigns', campaignRouter);
 app.use('/api/campaigns', characterRouter);
+app.use('/api/campaigns', characterTokensRouter);
 app.use('/api/campaigns', playAreaRouter);
 app.use('/api/campaigns', messagesRouter);
 app.use('/api/campaigns', fogRouter);
+app.use('/api/campaigns', lightingRouter);
 app.use('/api/campaigns', editorRouter);
 app.use('/api/campaigns', placementsRouter);
+app.use('/api/campaigns', wallsRouter);
+app.use('/api/campaigns', lightsRouter);
+app.use('/api/campaigns', scenesRouter);
 
 // Dev-only routes — never enable in production
 if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {

@@ -23,7 +23,10 @@ function RollBreakdown({ rollData }: { rollData: RollResult }): ReactElement {
 
   return (
     <div className={styles.rollBreakdown}>
-      <span className={styles.rollFormula}>rolled {rollData.formula}</span>
+      <span className={styles.rollFormula}>
+        rolled {rollData.formula}
+        {rollData.label !== undefined && ` (${rollData.label})`}
+      </span>
       <span className={styles.rollDice}>
         {hasAdvDis ? (
           // Show both rolled values; the dropped die is struck through.

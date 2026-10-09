@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { CAMPAIGN_DESCRIPTION_MAX_LENGTH, CAMPAIGN_NAME_MAX_LENGTH } from '../constants/campaigns.js';
+import { DEFAULT_GAME_SYSTEM, GAME_SYSTEM_IDS } from '../constants/game-systems.js';
 
 /**
  * Schema for creating a new campaign
@@ -16,6 +17,11 @@ export const campaignCreatePayloadSchema = z.object({
     .trim()
     .max(CAMPAIGN_DESCRIPTION_MAX_LENGTH, `Description must be ${CAMPAIGN_DESCRIPTION_MAX_LENGTH} characters or fewer`)
     .optional(),
+  gameSystem: z
+    .enum(GAME_SYSTEM_IDS, {
+      errorMap: () => ({ message: 'Game system must be dnd5e or pf2e' }),
+    })
+    .default(DEFAULT_GAME_SYSTEM),
 });
 
 /**
@@ -35,6 +41,10 @@ export const campaignUpdatePayloadSchema = z
       .max(CAMPAIGN_DESCRIPTION_MAX_LENGTH, `Description must be ${CAMPAIGN_DESCRIPTION_MAX_LENGTH} characters or fewer`)
       .nullable()
       .optional(),
+    // The game system is immutable after creation — reject any attempt to change it
+    gameSystem: z.undefined({
+      invalid_type_error: 'Game system cannot be changed after creation',
+    }),
   })
   .refine(
     (data) => data.name !== undefined || data.description !== undefined,

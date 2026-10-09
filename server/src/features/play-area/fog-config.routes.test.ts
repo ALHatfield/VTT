@@ -6,6 +6,7 @@ import { DEFAULT_FOG_MASK_CONFIG } from '@vtt/shared';
 
 import { app } from '../../app.js';
 import { prisma } from '../../shared/db/prisma.js';
+import { loginAs } from '../../shared/test-utils/login.js';
 import { hashPassword } from '../../shared/utils/password.js';
 
 const TEST_USERNAMES = ['FogCfg_DM', 'FogCfg_Player', 'FogCfg_Observer'];
@@ -15,11 +16,6 @@ async function createUser(username: string, email: string): Promise<{ id: string
     data: { username, email, passwordHash: await hashPassword('password123') },
   });
   return { id: user.id, email: user.email };
-}
-
-async function loginAs(email: string): Promise<string[]> {
-  const res = await request(app).post('/api/auth/login').send({ email, password: 'password123' });
-  return res.headers['set-cookie'] as unknown as string[];
 }
 
 describe('Fog Config & Exploration Routes (Phase PM2)', () => {

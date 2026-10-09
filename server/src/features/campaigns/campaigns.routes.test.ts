@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../../app.js';
 import { prisma } from '../../shared/db/prisma.js';
+import { loginAs } from '../../shared/test-utils/login.js';
 import { hashPassword } from '../../shared/utils/password.js';
 
 // Helpers
@@ -21,11 +22,6 @@ async function createUser(overrides?: { username?: string; email?: string }): Pr
     },
   });
   return { id: user.id, email: user.email, password };
-}
-
-async function loginAs(email: string, password: string): Promise<string[]> {
-  const res = await request(app).post('/api/auth/login').send({ email, password });
-  return res.headers['set-cookie'] as unknown as string[];
 }
 
 describe('Campaign Routes', () => {
@@ -123,6 +119,46 @@ describe('Campaign Routes', () => {
 
       expect(res.body.data.name).toBe('No Description');
       expect(res.body.data.description).toBeNull();
+    });
+
+    it('defaults gameSystem to dnd5e when omitted (Phase 3C)', async () => {
+      const res = await request(app)
+        .post('/api/campaigns')
+        .set('Cookie', dmCookies)
+        .send({ name: 'Default System' })
+        .expect(201);
+
+      expect(res.body.data.gameSystem).toBe('dnd5e');
+    });
+
+    it('creates a campaign with dnd5e explicitly (Phase 3C)', async () => {
+      const res = await request(app)
+        .post('/api/campaigns')
+        .set('Cookie', dmCookies)
+        .send({ name: '5e Campaign', gameSystem: 'dnd5e' })
+        .expect(201);
+
+      expect(res.body.data.gameSystem).toBe('dnd5e');
+    });
+
+    it('creates a campaign with pf2e (Phase 3C)', async () => {
+      const res = await request(app)
+        .post('/api/campaigns')
+        .set('Cookie', dmCookies)
+        .send({ name: 'PF2e Campaign', gameSystem: 'pf2e' })
+        .expect(201);
+
+      expect(res.body.data.gameSystem).toBe('pf2e');
+    });
+
+    it('returns 400 for an unsupported game system (Phase 3C)', async () => {
+      const res = await request(app)
+        .post('/api/campaigns')
+        .set('Cookie', dmCookies)
+        .send({ name: 'Bad System', gameSystem: 'gurps' })
+        .expect(400);
+
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
     });
   });
 
@@ -256,6 +292,26 @@ describe('Campaign Routes', () => {
         .expect(400);
 
       expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 when attempting to change the game system (Phase 3C)', async () => {
+      const res = await request(app)
+        .put(`/api/campaigns/${campaignId}`)
+        .set('Cookie', dmCookies)
+        .send({ name: 'Still 5e', gameSystem: 'pf2e' })
+        .expect(400);
+
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.details.gameSystem).toContain(
+        'Game system cannot be changed after creation',
+      );
+
+      // System is unchanged in the database
+      const detail = await request(app)
+        .get(`/api/campaigns/${campaignId}`)
+        .set('Cookie', dmCookies)
+        .expect(200);
+      expect(detail.body.data.gameSystem).toBe('dnd5e');
     });
   });
 

@@ -1,4 +1,5 @@
 import type { CampaignRole, NpcSubtype, TokenType, TokenVisionReveal } from '@vtt/shared';
+import { isEnemyToken } from '@vtt/shared';
 
 import type { FogViewMode } from './useFogViewMode';
 
@@ -39,4 +40,13 @@ export function filterVisionRevealsForFogPreview({
   );
 
   return reveals.filter((reveal) => visibleTokenIds.has(reveal.tokenId));
+}
+
+/** Drop enemy tokens the party has no line of sight to; null keeps every token. */
+export function filterTokensByPartySight<T extends VisionSourceToken>(
+  tokens: T[],
+  visibleEnemyTokenIds: ReadonlySet<string> | null,
+): T[] {
+  if (visibleEnemyTokenIds === null) return tokens;
+  return tokens.filter((token) => !isEnemyToken(token) || visibleEnemyTokenIds.has(token.id));
 }

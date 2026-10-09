@@ -25,10 +25,11 @@ async function assertSceneBelongsToCampaign(sceneId: string, campaignId: string)
 /**
  * Convert token vision reveals (grid space) into world-space exploration
  * candidates, deduplicated onto a quantization grid so that a token idling or
- * jittering in place does not create unbounded rows.
+ * jittering in place does not create unbounded rows. `radiusPx` overrides the
+ * vision radius when walls limit what the emitter can see (Phase PM3).
  */
 export function buildExplorationCandidates(
-  reveals: Pick<TokenVisionReveal, 'x' | 'y' | 'visionRadius'>[],
+  reveals: (Pick<TokenVisionReveal, 'x' | 'y' | 'visionRadius'> & { radiusPx?: number })[],
   cellSize: number,
   quantizeCells: number = FOG_EXPLORATION_QUANTIZE_CELLS,
 ): ExplorationCandidate[] {
@@ -36,7 +37,8 @@ export function buildExplorationCandidates(
   const byKey = new Map<string, ExplorationCandidate>();
 
   for (const reveal of reveals) {
-    if (reveal.visionRadius <= 0) continue;
+    const radius = reveal.radiusPx ?? reveal.visionRadius * cellSize;
+    if (reveal.visionRadius <= 0 || radius <= 0) continue;
 
     const cellX = Math.round(reveal.x / step) * step;
     const cellY = Math.round(reveal.y / step) * step;
@@ -46,7 +48,7 @@ export function buildExplorationCandidates(
       cellKey,
       x: cellX * cellSize + cellSize / 2,
       y: cellY * cellSize + cellSize / 2,
-      radius: reveal.visionRadius * cellSize,
+      radius,
     };
 
     // Two emitters on the same cell collapse to one row — the widest wins.

@@ -1,20 +1,22 @@
 import type { FederatedPointerEvent } from 'pixi.js';
-import { Application, Assets, Container, Graphics } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Rectangle } from 'pixi.js';
 
 import type {
-  AssetCategory,
-  CampaignRole,
-  FogMaskConfig,
-  FogRegion,
-  FogVertex,
-  GridConfig,
-  MapData,
-  TileAsset,
-  TilePlacement,
-  Token,
-  TokenVisionReveal,
-  ViewportBounds,
-  VisionStamp,
+    AssetCategory,
+    CampaignRole,
+    DoorState,
+    FogMaskConfig,
+    FogRegion,
+    FogVertex,
+    GridConfig,
+    MapData,
+    TileAsset,
+    TilePlacement,
+    Token,
+    TokenVisionReveal,
+    ViewportBounds,
+    VisibilityPolygon,
+    VisionStamp,
 } from '@vtt/shared';
 import { MAX_ZOOM, MIN_ZOOM, ZOOM_FACTOR } from '@vtt/shared';
 
@@ -22,7 +24,9 @@ import { BackgroundLayer } from './BackgroundLayer';
 import { ForegroundLayer } from './ForegroundLayer';
 import { PlaygroundLayer } from './PlaygroundLayer';
 import { TilePlacementSprite } from './TilePlacementSprite';
+import { DoorLayer } from './doors/DoorLayer';
 import { snapToGrid } from './grid-utils';
+import { LightLayer, type RenderableLight } from './lights/LightLayer';
 import { rectFromPoints, rectsIntersect } from './selection-utils';
 import { getViewportBounds } from './viewport-culling';
 
@@ -47,6 +51,7 @@ export type ToolMode =
   | 'fog-reveal'
   | 'fog-hide'
   | 'npc-place'
+  | 'light-place'
   | 'draw-freehand'
   | 'draw-shape';
 
@@ -54,9 +59,16 @@ export class CanvasManager {
   private readonly app: Application;
   private readonly worldContainer: Container;
   readonly backgroundLayer: BackgroundLayer;
+  readonly lightLayer: LightLayer;
   readonly playgroundLayer: PlaygroundLayer;
   readonly foregroundLayer: ForegroundLayer;
+  /** Clickable door markers (PM3) — above fog so visible doors stay interactive. */
+  readonly doorLayer: DoorLayer;
 
+  // Wall-clock time keeps seeded light animation in phase across clients
+  private readonly handleLightTick = (): void => {
+    this.lightLayer.update(Date.now());
+  };
   private currentMapData: MapData | null = null;
   private currentCellSize = 64;
 
@@ -72,14 +84,18 @@ export class CanvasManager {
   // Token drag state — used by PlayArea to suppress panning during token drag
   private _isDraggingToken = false;
 
-  // Middle-mouse pan state — handled natively on the canvas to avoid interfering with PixiJS
+  // Middle-mouse pan (all modes) and left-drag pan on empty canvas (play-mode select tool).
+  // Handled natively on the canvas to avoid interfering with PixiJS.
   private panActive = false;
+  private panButton = -1;
   private panLastX = 0;
   private panLastY = 0;
   private readonly handlePanPointerDown = (e: PointerEvent): void => {
-    if (e.button !== 1) return;
-    e.preventDefault(); // suppress browser autoscroll cursor
+    const isMiddle = e.button === 1;
+    if (!isMiddle && !(e.button === 0 && this.shouldLeftPan(e))) return;
+    if (isMiddle) e.preventDefault(); // suppress browser autoscroll cursor
     this.panActive = true;
+    this.panButton = e.button;
     this.panLastX = e.clientX;
     this.panLastY = e.clientY;
     this.app.canvas.setPointerCapture(e.pointerId);
@@ -93,9 +109,33 @@ export class CanvasManager {
     this.pan(dx, dy);
   };
   private readonly handlePanPointerUp = (e: PointerEvent): void => {
-    if (e.button !== 1) return;
+    if (e.button !== this.panButton) return;
     this.panActive = false;
+    this.panButton = -1;
   };
+
+  /**
+   * Play-mode select tool pans on left-drag unless the pointer is over something
+   * with its own pointerdown handler (draggable token, door marker) or Shift is held (marquee).
+   */
+  private shouldLeftPan(e: PointerEvent): boolean {
+    if (this.editorModeEnabled || this.currentToolMode !== 'select' || e.shiftKey) return false;
+    const rect = this.app.canvas.getBoundingClientRect();
+    let target: Container | null = this.app.renderer.events.rootBoundary.hitTest(
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+    );
+    while (target && target !== this.app.stage) {
+      if (target.listenerCount('pointerdown') > 0) return false;
+      target = target.parent;
+    }
+    return true;
+  }
+
+  private updateDefaultCursor(): void {
+    const panByDefault = !this.editorModeEnabled && this.currentToolMode === 'select';
+    this.app.renderer.events.cursorStyles.default = panByDefault ? 'grab' : 'default';
+  }
 
   // Right-click pan — global behavior available in all tool modes
   private rightPanActive = false;
@@ -220,8 +260,9 @@ export class CanvasManager {
     this.backgroundDownShift = e.shiftKey;
     this.backgroundPointerActive = true;
 
-    // Start a potential marquee in editor mode OR play-mode select tool.
-    const canMarquee = this.editorModeEnabled || this.currentToolMode === 'select';
+    // Start a potential marquee in editor mode OR play-mode select tool with Shift
+    // (plain drag pans in play mode — see shouldLeftPan).
+    const canMarquee = this.canMarquee();
     if (canMarquee) {
       const start = this.screenToWorld(e.global.x, e.global.y);
       this.marqueeStartWorldX = start.x;
@@ -233,8 +274,7 @@ export class CanvasManager {
 
   private readonly handleStagePointerMove = (e: FederatedPointerEvent): void => {
     if (!this.backgroundPointerActive) return;
-    const canMarquee = this.editorModeEnabled || this.currentToolMode === 'select';
-    if (!canMarquee) return;
+    if (!this.canMarquee()) return;
     const dx = e.global.x - this.backgroundDownX;
     const dy = e.global.y - this.backgroundDownY;
     if (!this.marqueeActive && Math.hypot(dx, dy) < MARQUEE_ACTIVATION_THRESHOLD) return;
@@ -249,6 +289,12 @@ export class CanvasManager {
     this.marqueeEndWorldY = world.y;
     this.redrawMarquee();
   };
+
+  private canMarquee(): boolean {
+    return (
+      this.editorModeEnabled || (this.currentToolMode === 'select' && this.backgroundDownShift)
+    );
+  }
 
   private readonly handleStagePointerUp = (e: FederatedPointerEvent): void => {
     // Only fire when the pointerdown originated on the stage itself
@@ -297,6 +343,11 @@ export class CanvasManager {
   /** Fired when rubber-band selection in play-mode select tool completes. */
   onTokensSelected?: (tokenIds: string[]) => void;
 
+  /** Fired when a door is clicked in play mode (Phase PM3). */
+  onDoorSelect?: (wallId: string) => void;
+  /** Fired after the world container pans or zooms. */
+  onViewportChange?: () => void;
+
   // Editor-mode callbacks
   onTilePlaced?: (
     assetId: string,
@@ -322,13 +373,54 @@ export class CanvasManager {
     this.app = new Application();
     this.worldContainer = new Container();
     this.backgroundLayer = new BackgroundLayer();
+    this.lightLayer = new LightLayer();
     this.playgroundLayer = new PlaygroundLayer();
     this.foregroundLayer = new ForegroundLayer();
+    this.doorLayer = new DoorLayer();
+    this.doorLayer.onSelect = (wallId): void => this.onDoorSelect?.(wallId);
   }
 
   /** The PixiJS-created canvas element, available after init(). */
   get canvas(): HTMLCanvasElement {
     return this.app.canvas;
+  }
+
+  /**
+   * Render the authored scene (background layer + foreground tile placements)
+   * into a WebP/PNG blob scaled to maxWidth (editor 5H thumbnails). Session
+   * overlays — tokens, fog, lights, doors — are excluded. Returns null when no
+   * map is loaded.
+   */
+  async extractSceneSnapshot(maxWidth: number): Promise<Blob | null> {
+    const map = this.currentMapData;
+    if (!map || map.width <= 0 || map.height <= 0) return null;
+
+    const resolution = Math.min(1, maxWidth / map.width);
+    // Layer containers sit at the world origin, so their local space is world space
+    const frame = new Rectangle(0, 0, map.width, map.height);
+    const bgCanvas = this.app.renderer.extract.canvas({
+      target: this.backgroundLayer,
+      frame,
+      resolution,
+    });
+    const fgCanvas = this.app.renderer.extract.canvas({
+      target: this.foregroundLayer.tilePlacementsView,
+      frame,
+      resolution,
+    });
+
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(map.width * resolution));
+    out.height = Math.max(1, Math.round(map.height * resolution));
+    const ctx = out.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(bgCanvas as HTMLCanvasElement, 0, 0, out.width, out.height);
+    ctx.drawImage(fgCanvas as HTMLCanvasElement, 0, 0, out.width, out.height);
+
+    // Browsers without WebP encoding fall back to PNG — the server accepts both
+    return new Promise((resolve) => {
+      out.toBlob((blob) => resolve(blob), 'image/webp', 0.8);
+    });
   }
 
   /** True while a token drag is in progress. PlayArea uses this to suppress map panning. */
@@ -353,12 +445,18 @@ export class CanvasManager {
     container.appendChild(this.app.canvas);
 
     this.worldContainer.addChild(this.backgroundLayer);
+    // Light glow sits above the map but below tokens; fog still composites on top.
+    this.worldContainer.addChild(this.lightLayer);
     this.worldContainer.addChild(this.playgroundLayer);
     this.worldContainer.addChild(this.foregroundLayer);
+    this.worldContainer.addChild(this.doorLayer);
+    this.worldContainer.addChild(this.playgroundLayer.overlayContainer);
     this.app.stage.addChild(this.worldContainer);
+    this.app.ticker.add(this.handleLightTick);
 
     // PM2 fog masks are composed with the live renderer into RenderTextures.
     this.foregroundLayer.attachRenderer(this.app.renderer);
+    this.updateDefaultCursor();
 
     // Stage-level background click — fires only when no token sprite stops propagation.
     // Uses pointerup + distance guard so pan gestures don't clear selection.
@@ -385,12 +483,23 @@ export class CanvasManager {
   async loadMap(mapData: MapData): Promise<void> {
     this.currentMapData = mapData;
     this.currentCellSize = mapData.gridConfig.cellSize;
+    this.lightLayer.setCellSize(mapData.gridConfig.cellSize);
     // Center/zoom synchronously first so tokens added in the same React flush
     // appear at the correct scale before the background image finishes loading.
     this.centerMap(mapData.width, mapData.height);
     this.playgroundLayer.drawGrid(mapData.width, mapData.height, mapData.gridConfig);
     this.foregroundLayer.setMapBounds(mapData.width, mapData.height);
+    this.applyTileClip();
     await this.backgroundLayer.loadMap(mapData);
+  }
+
+  /** Play mode hides tile art overhanging the map edge; the editor shows it in full. */
+  private applyTileClip(): void {
+    const map = this.currentMapData;
+    const bounds = map && !this.editorModeEnabled ? { width: map.width, height: map.height } : null;
+    this.backgroundLayer.setTileClip(bounds);
+    this.playgroundLayer.setTileClip(bounds);
+    this.foregroundLayer.setTileClip(bounds);
   }
 
   private centerMap(mapWidth: number, mapHeight: number): void {
@@ -400,11 +509,13 @@ export class CanvasManager {
     this.worldContainer.scale.set(zoom);
     this.worldContainer.x = (screenW - mapWidth * zoom) / 2;
     this.worldContainer.y = (screenH - mapHeight * zoom) / 2;
+    this.onViewportChange?.();
   }
 
   pan(dx: number, dy: number): void {
     this.worldContainer.x += dx;
     this.worldContainer.y += dy;
+    this.onViewportChange?.();
   }
 
   zoom(delta: number, centerX: number, centerY: number): void {
@@ -418,6 +529,7 @@ export class CanvasManager {
     this.worldContainer.scale.set(newZoom);
     this.worldContainer.x = centerX - worldX * newZoom;
     this.worldContainer.y = centerY - worldY * newZoom;
+    this.onViewportChange?.();
   }
 
   setGridConfig(config: GridConfig): void {
@@ -509,6 +621,22 @@ export class CanvasManager {
     this.foregroundLayer.setTokenVisionReveals(reveals, this.currentCellSize);
   }
 
+  /** Line-of-sight polygons that replace vision circles for obstructed emitters (PM3). */
+  setVisibilityPolygons(polygons: VisibilityPolygon[]): void {
+    this.foregroundLayer.setVisibilityPolygons(polygons);
+    this.lightLayer.setOcclusionPolygons(polygons);
+  }
+
+  /** Render door markers; `interactive` enables click-to-select (PM3). */
+  setDoors(doors: readonly DoorState[], interactive: boolean): void {
+    this.doorLayer.setDoors(doors, interactive);
+  }
+
+  /** Highlight the selected door, or clear the highlight with null. */
+  setSelectedDoor(wallId: string | null): void {
+    this.doorLayer.setSelectedDoor(wallId);
+  }
+
   /** Apply the scene's PM2 fog mask configuration (Phase PM2). */
   setFogMaskConfig(config: FogMaskConfig): void {
     this.foregroundLayer.setFogMaskConfig(config);
@@ -536,6 +664,15 @@ export class CanvasManager {
     };
   }
 
+  /** World pixels → canvas-relative screen pixels. */
+  worldToScreen(worldX: number, worldY: number): FogVertex {
+    const zoom = this.worldContainer.scale.x;
+    return {
+      x: worldX * zoom + this.worldContainer.x,
+      y: worldY * zoom + this.worldContainer.y,
+    };
+  }
+
   /**
    * Convert a canvas-relative drop position to world coordinates with optional grid snapping.
    * @param clientX - pointer clientX from the drag event
@@ -559,11 +696,21 @@ export class CanvasManager {
     return { x: rawX, y: rawY };
   }
 
+  /** Render authored + temporary lights (Phase PM4). */
+  setLights(lights: readonly RenderableLight[]): void {
+    this.lightLayer.setLights(lights);
+  }
+
+  setLightingReducedMotion(reduced: boolean): void {
+    this.lightLayer.setReducedMotion(reduced);
+  }
+
   /**
    * Set the active canvas tool mode. Controls pointer behavior in play mode.
    */
   setToolMode(mode: ToolMode): void {
     this.currentToolMode = mode;
+    this.updateDefaultCursor();
     // Cancel any in-progress marquee when switching modes
     if (this.marqueeActive) {
       this.clearMarqueeGraphic();
@@ -579,7 +726,12 @@ export class CanvasManager {
    */
   setEditorMode(enabled: boolean): void {
     this.editorModeEnabled = enabled;
+    this.updateDefaultCursor();
+    // The editor draws its own wall overlay; door markers are play-mode only.
+    this.doorLayer.visible = !enabled;
+    this.foregroundLayer.setFogSuppressed(enabled);
     this.setAllTilePlacementsInteractive(enabled);
+    this.applyTileClip();
     if (enabled) {
       window.addEventListener('keydown', this.handleArrowKey);
     } else {
@@ -937,6 +1089,10 @@ export class CanvasManager {
     window.removeEventListener('keydown', this.handleArrowKey);
     // Ensure marquee graphic is cleaned up if destroy() runs mid-drag
     this.clearMarqueeGraphic();
+    this.app.ticker.remove(this.handleLightTick);
+    this.lightLayer.destroy();
+    this.doorLayer.destroy({ children: true });
+    this.playgroundLayer.overlayContainer.destroy({ children: true });
     this.foregroundLayer.destroyFogMask();
     // In PixiJS v8, removeView is not a valid option — manually remove the canvas first
     this.app.canvas.remove();

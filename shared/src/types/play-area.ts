@@ -1,3 +1,10 @@
+import type {
+    LightAnimationMode,
+    LightEmitterType,
+    LightSource,
+    LightSourceUpdatePayload,
+} from './editor.js';
+
 export interface GridConfig {
   cellSize: number;
   visible: boolean;
@@ -287,57 +294,6 @@ export interface InitiativeUpdatedPayload {
 }
 
 // ---------------------------------------------------------------------------
-// Dice types (Phase 4E)
-// ---------------------------------------------------------------------------
-
-/** Parsed representation of a dice formula string (e.g. "3d6+4", "d20 advantage"). */
-export interface DiceFormula {
-  /** The original formula string as submitted by the user, e.g. "3d6+4". */
-  raw: string;
-  /** Number of dice to roll (e.g. 3 in "3d6"). */
-  count: number;
-  /** Die type — number of faces (e.g. 6 in "3d6"). */
-  sides: number;
-  /** Numeric modifier applied after summing kept rolls (e.g. 4 in "3d6+4", -1 in "d8-1"). */
-  modifier: number;
-  /** Roll two dice, keep the higher (D&D advantage mechanic). Applies when count === 1. */
-  advantage: boolean;
-  /** Roll two dice, keep the lower (D&D disadvantage mechanic). Applies when count === 1. */
-  disadvantage: boolean;
-}
-
-/** Full result of a dice roll — persisted as rollData on a chat message. */
-export interface RollResult {
-  /** Formula string that was rolled, e.g. "3d6+4". */
-  formula: string;
-  count: number;
-  sides: number;
-  /** All individual die values rolled (2 entries when advantage/disadvantage is active). */
-  rolls: number[];
-  /** Die values that count toward the total (drops the unused die for adv/dis). */
-  keptRolls: number[];
-  modifier: number;
-  advantage: boolean;
-  disadvantage: boolean;
-  /** Final total: sum(keptRolls) + modifier. */
-  total: number;
-}
-
-/** Socket payload sent by the client to request a dice roll (Client → Server). */
-export interface DiceRollPayload {
-  campaignId: string;
-  /** The formula portion after stripping the "/roll " prefix, e.g. "3d6+4". */
-  formula: string;
-}
-
-/**
- * Which dice roll presentation the client uses (Phase PM1).
- * Mirrors the FogMode pattern — `instant` is the Phase 4E chat-only path,
- * `3d` is the Three.js overlay. New renderers add a mode here.
- */
-export type DiceAnimationMode = 'instant' | '3d';
-
-// ---------------------------------------------------------------------------
 // Fog of war types (Phase 4F)
 // ---------------------------------------------------------------------------
 
@@ -441,6 +397,10 @@ export interface FogMaskConfig {
   hiddenAlpha: number;
   /** Fraction of a stamp radius used for the soft falloff edge. */
   edgeSoftnessRatio: number;
+  /** Wall-ignoring peripheral radius in grid cells from each token's centre; 0 disables it. */
+  peripheralVisionRadius: number;
+  /** Fog opacity inside the peripheral radius but outside line of sight; beyond is fully black. */
+  peripheralShroudAlpha: number;
 }
 
 /** A circular reveal emitter stamped into the fog mask, in world pixel space. */
@@ -564,4 +524,161 @@ export interface DrawClearedPayload {
   campaignId: string;
   scope: 'all' | 'own';
   userId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic lighting types (Phase PM4)
+// ---------------------------------------------------------------------------
+
+/**
+ * A DM-placed encounter light. Session-scoped: held in server memory, never
+ * persisted to the scene. Shares the render fields of an authored `LightSource`.
+ */
+export interface TemporaryLight {
+  id: string;
+  campaignId: string;
+  sceneId: string;
+  /** World-pixel X. */
+  x: number;
+  /** World-pixel Y. */
+  y: number;
+  /** Radius in grid cells. */
+  radius: number;
+  color: string;
+  intensity: number;
+  falloff: number;
+  emitterType: LightEmitterType;
+  animationMode: LightAnimationMode;
+  animationSeed: number;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** Client → Server: DM places a temporary light. Omitted fields come from the emitter preset. */
+export interface TemporaryLightCreatePayload {
+  campaignId: string;
+  sceneId: string;
+  emitterType: LightEmitterType;
+  x: number;
+  y: number;
+  radius?: number;
+  color?: string;
+  intensity?: number;
+  falloff?: number;
+  animationMode?: LightAnimationMode;
+}
+
+/** Client → Server: DM edits a temporary light. `changes` reuses the editor light patch shape. */
+export interface TemporaryLightUpdatePayload {
+  campaignId: string;
+  sceneId: string;
+  lightId: string;
+  changes: LightSourceUpdatePayload;
+}
+
+/** Client → Server: DM removes a temporary light. */
+export interface TemporaryLightDeletePayload {
+  campaignId: string;
+  sceneId: string;
+  lightId: string;
+}
+
+/** Server → Client: full snapshot of a scene's temporary lights after any change. */
+export interface TemporaryLightsUpdatedPayload {
+  campaignId: string;
+  sceneId: string;
+  lights: TemporaryLight[];
+}
+
+/** REST response for the play-area lighting read — visible to all campaign members. */
+export interface SceneLighting {
+  authored: LightSource[];
+  temporary: TemporaryLight[];
+}
+
+// ---------------------------------------------------------------------------
+// Line of sight types (Phase PM3)
+// ---------------------------------------------------------------------------
+
+/** Axis-aligned bounds in world pixels, used to cull obstacles before raycasting. */
+export interface ObstacleBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** Result of casting one ray from an emitter; `segmentId` is null when capped by the radius. */
+export interface RaycastHit {
+  x: number;
+  y: number;
+  distance: number;
+  segmentId: string | null;
+}
+
+/** What produced a visibility polygon: a token's vision or a light emitter lighting the area. */
+export type VisionSource = 'token' | 'light';
+
+/**
+ * Obstacle-aware visible area for one emitter, in world pixels. Points are in
+ * ascending-angle order (counter-clockwise in y-up space).
+ */
+export interface VisibilityPolygon {
+  /** Token id (source `token`) or light id (source `light`). */
+  emitterId: string;
+  source: VisionSource;
+  /**
+   * Whether players may see this area: party tokens for `token`; for `light`, a party
+   * token has line of sight to the light or the light is `alwaysVisible`. Only DMs ever receive `false`.
+   */
+  partyVisible: boolean;
+  sceneId: string;
+  origin: FogVertex;
+  /** Vision radius in world pixels. */
+  radius: number;
+  points: FogVertex[];
+}
+
+/** A door the viewer may interact with — geometry is limited to the door itself. */
+export interface DoorState {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  isOpen: boolean;
+}
+
+/** Client → Server: request a line-of-sight recompute after wall geometry changed. */
+export interface VisionRefreshPayload {
+  campaignId: string;
+  sceneId: string;
+}
+
+/**
+ * Server → Client: role-gated visibility polygons and interactive doors.
+ * Emitters without nearby obstacles are omitted and fall back to circular reveals.
+ */
+export interface VisionUpdatedPayload {
+  campaignId: string;
+  sceneId: string;
+  polygons: VisibilityPolygon[];
+  doors: DoorState[];
+  /** Enemy tokens (see `isEnemyToken`) some party token has a clear sight line to. Empty for observers. */
+  visibleEnemyTokenIds: string[];
+}
+
+/** Client → Server: open or close a door. */
+export interface DoorTogglePayload {
+  campaignId: string;
+  sceneId: string;
+  wallId: string;
+}
+
+/** Server → Client: a door changed state. */
+export interface DoorToggledPayload {
+  campaignId: string;
+  sceneId: string;
+  wallId: string;
+  isOpen: boolean;
 }

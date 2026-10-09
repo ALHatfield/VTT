@@ -16,17 +16,13 @@ import type {
 import {
     AURA_EVENTS,
     CHAT_EVENTS,
-    DICE_EVENTS,
-    DICE_ROLL_COOLDOWN_MS,
     DRAW_EVENTS,
     FOG_EVENTS,
     INITIATIVE_EVENTS,
     MEASURE_EVENTS,
     PLAY_AREA_EVENTS,
-    VISION_SYNC_DEBOUNCE_MS,
     auraUpdatePayloadSchema,
     chatSendPayloadSchema,
-    diceRollPayloadSchema,
     drawClearPayloadSchema,
     drawStrokePayloadSchema,
     fogHidePayloadSchema,
@@ -44,7 +40,6 @@ import {
 import type { Server, Socket } from 'socket.io';
 
 import { prisma } from '../../shared/db/prisma.js';
-import { parseDiceFormula, rollDiceFormula } from './dice.service.js';
 import { deleteFogRegion, hideFogByPolygon, revealFogRegion } from './fog.service.js';
 import {
     advanceInitiativeForCampaign,
@@ -53,31 +48,11 @@ import {
     reorderInitiativeForCampaign,
     startInitiativeForCampaign,
 } from './initiative.service.js';
+import { registerLightHandlers } from './lights.socket.js';
 import { updateToken } from './tokens.service.js';
-import { emitVisionSync, emitVisionSyncToSocket } from './vision.service.js';
-
-/** Per-campaign debounce timers for vision sync broadcasts. */
-const visionSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-/**
- * Debounce vision sync: wait VISION_SYNC_DEBOUNCE_MS after the last token move
- * before broadcasting — prevents flooding when many tokens move rapidly.
- * Keyed by `campaign:sceneId` to avoid stale sceneId when multiple scenes are active.
- */
-function scheduleVisionSync(io: Server, campaignId: string, sceneId: string): void {
-  const key = `${campaignId}:${sceneId}`;
-  const existing = visionSyncTimers.get(key);
-  if (existing) clearTimeout(existing);
-
-  const timer = setTimeout(() => {
-    visionSyncTimers.delete(key);
-    emitVisionSync(io, campaignId, sceneId).catch((err: unknown) => {
-      console.error('[play-area socket] vision:sync error', err);
-    });
-  }, VISION_SYNC_DEBOUNCE_MS);
-
-  visionSyncTimers.set(key, timer);
-}
+import { scheduleVisionSync } from './vision.scheduler.js';
+import { emitVisionSyncToSocket } from './vision.service.js';
+import { registerVisionHandlers } from './vision.socket.js';
 
 /**
  * Registers all play-area Socket.IO event handlers for a connected socket.
@@ -548,97 +523,6 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
     }
   });
 
-  socket.on(DICE_EVENTS.DICE_ROLL, async (rawPayload: unknown) => {
-    try {
-      const parsed = diceRollPayloadSchema.safeParse(rawPayload);
-      if (!parsed.success) {
-        socket.emit(PLAY_AREA_EVENTS.ERROR, {
-          code: 'INVALID_PAYLOAD',
-          message: 'Invalid dice roll payload',
-        });
-        return;
-      }
-
-      const { campaignId, formula } = parsed.data;
-
-      // Guard: must have joined this campaign room
-      if (campaignId !== socket.data.campaignId) {
-        socket.emit(PLAY_AREA_EVENTS.ERROR, {
-          code: 'FORBIDDEN',
-          message: 'You have not joined this campaign room',
-        });
-        return;
-      }
-
-      // Guard: observers are read-only — dice rolls persist messages
-      const role = socket.data.campaignRole as string | undefined;
-      if (role === 'observer') {
-        socket.emit(PLAY_AREA_EVENTS.ERROR, {
-          code: 'FORBIDDEN',
-          message: 'Observers cannot roll dice',
-        });
-        return;
-      }
-
-      // Guard: one roll at a time per user — reject rapid-fire rolls
-      const lastRollAt = socket.data.lastDiceRollAt as number | undefined;
-      const now = Date.now();
-      if (lastRollAt !== undefined && now - lastRollAt < DICE_ROLL_COOLDOWN_MS) {
-        socket.emit(PLAY_AREA_EVENTS.ERROR, {
-          code: 'ROLL_IN_PROGRESS',
-          message: 'Wait for your previous roll to finish',
-        });
-        return;
-      }
-
-      const parsedFormula = parseDiceFormula(formula);
-      if (!parsedFormula) {
-        socket.emit(PLAY_AREA_EVENTS.ERROR, {
-          code: 'INVALID_FORMULA',
-          message: `Cannot parse dice formula: "${formula}"`,
-        });
-        return;
-      }
-
-      socket.data.lastDiceRollAt = now;
-      const rollResult = rollDiceFormula(parsedFormula);
-
-      const row = await prisma.campaignMessage.create({
-        data: {
-          campaignId,
-          userId,
-          username,
-          text: formula,
-          type: 'roll',
-          // Prisma requires InputJsonValue — spread into a plain object to satisfy the index signature
-          rollData: { ...rollResult },
-        },
-      });
-
-      const chatPayload: ChatReceivedPayload = {
-        message: {
-          id: row.id,
-          campaignId: row.campaignId,
-          userId: row.userId,
-          username: row.username,
-          text: row.text,
-          type: 'roll',
-          rollData: rollResult,
-          createdAt: row.createdAt.toISOString(),
-        },
-      };
-
-      const room = `campaign:${campaignId}`;
-      io.to(room).emit(CHAT_EVENTS.CHAT_RECEIVED, chatPayload);
-    } catch (err) {
-      console.error('[play-area socket] dice:roll error', err);
-      socket.emit(PLAY_AREA_EVENTS.ERROR, {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to process dice roll',
-      });
-    }
-  });
-
   socket.on(FOG_EVENTS.FOG_REVEAL, async (rawPayload: unknown) => {
     try {
       const parsed = fogRevealPayloadSchema.safeParse(rawPayload);
@@ -990,4 +874,7 @@ export function registerPlayAreaHandlers(io: Server, socket: Socket): void {
       });
     }
   });
+
+  registerLightHandlers(io, socket);
+  registerVisionHandlers(io, socket);
 }

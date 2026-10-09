@@ -1,32 +1,35 @@
 import type {
-  AuraUpdatedPayload,
-  TokenCreatedPayload,
-  TokenDeletedPayload,
-  TokenMovedPayload,
-  TokenUpdatedPayload,
+    AuraUpdatedPayload,
+    CharacterHpUpdatedPayload,
+    TokenCreatedPayload,
+    TokenDeletedPayload,
+    TokenMovedPayload,
+    TokenUpdatedPayload,
 } from '@vtt/shared';
 import {
-  AURA_EVENTS,
-  PLAY_AREA_EVENTS,
-  tokenCreatePayloadSchema,
-  tokenMovePayloadSchema,
-  tokenUpdatePayloadSchema,
+    AURA_EVENTS,
+    CHARACTER_EVENTS,
+    PLAY_AREA_EVENTS,
+    tokenCreatePayloadSchema,
+    tokenMovePayloadSchema,
+    tokenUpdatePayloadSchema,
 } from '@vtt/shared';
 import { Router } from 'express';
 
 import { getIo } from '../../shared/socket/io-instance.js';
+import { syncTokenHpToCharacter } from '../../shared/sync/character-token-sync.js';
 import { asyncHandler } from '../../shared/utils/async-handler.js';
 import { requireAuth } from '../auth/auth.middleware.js';
 import { requireCampaignRole } from '../campaigns/campaigns.middleware.js';
 import {
-  createToken,
-  deleteToken,
-  getOrCreateActiveScene,
-  listTokens,
-  moveToken,
-  updateToken,
+    createToken,
+    deleteToken,
+    getOrCreateActiveScene,
+    listTokens,
+    moveToken,
+    updateToken,
 } from './tokens.service.js';
-import { emitVisionSync } from './vision.service.js';
+import { flushVisionSync } from './vision.scheduler.js';
 
 const router = Router();
 
@@ -103,11 +106,7 @@ router.post(
       campaignId,
     } satisfies TokenCreatedPayload);
 
-    if (ioForCreate) {
-      emitVisionSync(ioForCreate, campaignId, sceneId).catch((err: unknown) => {
-        console.error('[tokens.routes] vision:sync error after token create', err);
-      });
-    }
+    if (ioForCreate) flushVisionSync(ioForCreate, campaignId, sceneId);
 
     res.status(201).json({ data: token });
   }),
@@ -142,6 +141,16 @@ router.put(
     }
     const token = await updateToken(tokenId, sceneId, campaignId, result.data, userId, userRole);
 
+    // Token HP edits flow back to the linked character sheet (characters 6B).
+    // Runs before broadcasting so a clamped HP is reflected in the token payload.
+    let hpSync = null;
+    if (result.data.hp !== undefined && result.data.hp !== null) {
+      hpSync = await syncTokenHpToCharacter(campaignId, tokenId, result.data.hp);
+      if (hpSync?.correctedTokenHp !== undefined) {
+        token.hp = hpSync.correctedTokenHp;
+      }
+    }
+
     const ioForUpdate = getIo();
     ioForUpdate?.to(`campaign:${campaignId}`).emit(PLAY_AREA_EVENTS.TOKEN_UPDATED, {
       token,
@@ -155,12 +164,17 @@ router.put(
       } satisfies AuraUpdatedPayload);
     }
 
-    // Emit role-gated vision sync when token properties (including visionRadius) change
-    if (ioForUpdate) {
-      emitVisionSync(ioForUpdate, campaignId, sceneId).catch((err: unknown) => {
-        console.error('[tokens.routes] vision:sync error after token update', err);
-      });
+    if (ioForUpdate && hpSync) {
+      ioForUpdate.to(`campaign:${campaignId}`).emit(CHARACTER_EVENTS.HP_UPDATED, {
+        campaignId,
+        characterId: hpSync.characterId,
+        hp: hpSync.hp,
+        maxHp: hpSync.maxHp,
+      } satisfies CharacterHpUpdatedPayload);
     }
+
+    // Emit role-gated vision sync when token properties (including visionRadius) change
+    if (ioForUpdate) flushVisionSync(ioForUpdate, campaignId, sceneId);
 
     res.status(200).json({ data: token });
   }),
@@ -212,11 +226,7 @@ router.patch(
       userId,
     } satisfies TokenMovedPayload);
 
-    if (ioForMove) {
-      emitVisionSync(ioForMove, campaignId, sceneId).catch((err: unknown) => {
-        console.error('[tokens.routes] vision:sync error after token move', err);
-      });
-    }
+    if (ioForMove) flushVisionSync(ioForMove, campaignId, sceneId);
 
     res.status(200).json({ data: token });
   }),
@@ -239,11 +249,7 @@ router.delete(
       campaignId,
     } satisfies TokenDeletedPayload);
 
-    if (ioForDelete) {
-      emitVisionSync(ioForDelete, campaignId, sceneId).catch((err: unknown) => {
-        console.error('[tokens.routes] vision:sync error after token delete', err);
-      });
-    }
+    if (ioForDelete) flushVisionSync(ioForDelete, campaignId, sceneId);
 
     res.status(204).send();
   }),

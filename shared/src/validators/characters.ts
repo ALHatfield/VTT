@@ -5,19 +5,29 @@ import {
     ABILITY_SCORE_MIN,
     AC_MAX,
     AC_MIN,
+    ATTACK_NAME_MAX_LENGTH,
     CHARACTER_BIOGRAPHY_MAX_LENGTH,
     CHARACTER_CLASS_MAX_LENGTH,
     CHARACTER_LEVEL_MAX,
     CHARACTER_LEVEL_MIN,
+    CHARACTER_MAX_ATTACKS,
+    CHARACTER_MAX_SPELLS,
     CHARACTER_NAME_MAX_LENGTH,
     CHARACTER_PORTRAIT_URL_MAX_LENGTH,
     CHARACTER_RACE_MAX_LENGTH,
+    DAMAGE_DICE_PATTERN,
     HP_MAX,
     HP_MIN,
     PROFICIENCY_BONUS_MAX,
     PROFICIENCY_BONUS_MIN,
+    SKILL_NAMES,
     SPEED_MAX,
     SPEED_MIN,
+    SPELL_LEVEL_MAX,
+    SPELL_LEVEL_MIN,
+    SPELL_NAME_MAX_LENGTH,
+    SPELL_SLOT_LEVEL_MIN,
+    SPELL_SLOT_MAX_PER_LEVEL,
 } from '../constants/characters.js';
 
 /**
@@ -31,6 +41,102 @@ const abilityScoresSchema = z.object({
   wisdom: z.number().int().min(ABILITY_SCORE_MIN).max(ABILITY_SCORE_MAX),
   charisma: z.number().int().min(ABILITY_SCORE_MIN).max(ABILITY_SCORE_MAX),
 });
+
+/**
+ * Portrait URL: absolute http(s) URL or a site-relative path (built-in images).
+ * Protocol-relative URLs (//host/...) are rejected — they resolve off-site.
+ */
+const portraitUrlSchema = z
+  .string()
+  .max(CHARACTER_PORTRAIT_URL_MAX_LENGTH)
+  .refine(
+    (url) => /^https?:\/\//.test(url) || (url.startsWith('/') && !url.startsWith('//')),
+    { message: 'URL must use http(s) or be a site-relative path' },
+  );
+
+/**
+ * Skill proficiencies: unique skill names from the 5e list (Phase 6C)
+ */
+const skillProficienciesSchema = z
+  .array(z.enum(SKILL_NAMES))
+  .max(SKILL_NAMES.length)
+  .refine((skills) => new Set(skills).size === skills.length, {
+    message: 'Skill proficiencies must be unique',
+  });
+
+/**
+ * A weapon/attack entry (Phase 6C)
+ */
+const characterAttackSchema = z.object({
+  id: z.string().uuid(),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Attack name is required')
+    .max(ATTACK_NAME_MAX_LENGTH, `Attack name must be ${ATTACK_NAME_MAX_LENGTH} characters or fewer`),
+  ability: z.enum([
+    'strength',
+    'dexterity',
+    'constitution',
+    'intelligence',
+    'wisdom',
+    'charisma',
+  ]),
+  proficient: z.boolean(),
+  damageDice: z
+    .string()
+    .trim()
+    .regex(DAMAGE_DICE_PATTERN, 'Damage dice must look like "1d8" or "2d6"'),
+});
+
+const attacksSchema = z
+  .array(characterAttackSchema)
+  .max(CHARACTER_MAX_ATTACKS)
+  .refine((attacks) => new Set(attacks.map((a) => a.id)).size === attacks.length, {
+    message: 'Attack ids must be unique',
+  });
+
+/**
+ * A spell entry (Phase 6D)
+ */
+const characterSpellSchema = z.object({
+  id: z.string().uuid(),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Spell name is required')
+    .max(SPELL_NAME_MAX_LENGTH, `Spell name must be ${SPELL_NAME_MAX_LENGTH} characters or fewer`),
+  level: z.number().int().min(SPELL_LEVEL_MIN).max(SPELL_LEVEL_MAX),
+  prepared: z.boolean(),
+});
+
+const spellsSchema = z
+  .array(characterSpellSchema)
+  .max(CHARACTER_MAX_SPELLS)
+  .refine((spells) => new Set(spells.map((s) => s.id)).size === spells.length, {
+    message: 'Spell ids must be unique',
+  });
+
+/**
+ * Spell slot tracking for one level: used can never exceed max (Phase 6D)
+ */
+const characterSpellSlotSchema = z
+  .object({
+    level: z.number().int().min(SPELL_SLOT_LEVEL_MIN).max(SPELL_LEVEL_MAX),
+    max: z.number().int().min(0).max(SPELL_SLOT_MAX_PER_LEVEL),
+    used: z.number().int().min(0).max(SPELL_SLOT_MAX_PER_LEVEL),
+  })
+  .refine((slot) => slot.used <= slot.max, {
+    message: 'Used slots cannot exceed max slots',
+    path: ['used'],
+  });
+
+const spellSlotsSchema = z
+  .array(characterSpellSlotSchema)
+  .max(SPELL_LEVEL_MAX)
+  .refine((slots) => new Set(slots.map((s) => s.level)).size === slots.length, {
+    message: 'Spell slot levels must be unique',
+  });
 
 /**
  * Schema for creating a new character
@@ -64,9 +170,11 @@ export const characterCreatePayloadSchema = z.object({
     .optional()
     .default(2),
   speed: z.number().int().min(SPEED_MIN).max(SPEED_MAX).optional().default(30),
-  portraitUrl: z.string().url().max(CHARACTER_PORTRAIT_URL_MAX_LENGTH)
-    .refine((url) => /^https?:\/\//.test(url), { message: 'URL must use http or https' })
-    .optional(),
+  skillProficiencies: skillProficienciesSchema.optional().default([]),
+  attacks: attacksSchema.optional().default([]),
+  spells: spellsSchema.optional().default([]),
+  spellSlots: spellSlotsSchema.optional().default([]),
+  portraitUrl: portraitUrlSchema.optional(),
   biography: z
     .string()
     .trim()
@@ -112,9 +220,11 @@ export const characterUpdatePayloadSchema = z
       .max(PROFICIENCY_BONUS_MAX)
       .optional(),
     speed: z.number().int().min(SPEED_MIN).max(SPEED_MAX).optional(),
-    portraitUrl: z.string().url().max(CHARACTER_PORTRAIT_URL_MAX_LENGTH)
-      .refine((url) => /^https?:\/\//.test(url), { message: 'URL must use http or https' })
-      .nullable().optional(),
+    skillProficiencies: skillProficienciesSchema.optional(),
+    attacks: attacksSchema.optional(),
+    spells: spellsSchema.optional(),
+    spellSlots: spellSlotsSchema.optional(),
+    portraitUrl: portraitUrlSchema.nullable().optional(),
     biography: z
       .string()
       .trim()
@@ -134,6 +244,23 @@ export const characterHpUpdatePayloadSchema = z.object({
   hp: z.number().int().min(HP_MIN).max(HP_MAX),
 });
 
+/**
+ * Schema for linking a character to a token (Phase 6B)
+ */
+export const characterLinkPayloadSchema = z.object({
+  characterId: z.string().min(1, 'characterId is required'),
+  tokenId: z.string().min(1, 'tokenId is required'),
+});
+
+/**
+ * Schema for assigning a character to a user (Phase 6B, DM only)
+ */
+export const characterAssignmentPayloadSchema = z.object({
+  userId: z.string().min(1, 'userId is required'),
+});
+
 export type CharacterCreateInput = z.infer<typeof characterCreatePayloadSchema>;
 export type CharacterUpdateInput = z.infer<typeof characterUpdatePayloadSchema>;
 export type CharacterHpUpdateInput = z.infer<typeof characterHpUpdatePayloadSchema>;
+export type CharacterLinkInput = z.infer<typeof characterLinkPayloadSchema>;
+export type CharacterAssignmentInput = z.infer<typeof characterAssignmentPayloadSchema>;

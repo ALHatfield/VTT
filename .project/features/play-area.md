@@ -11,87 +11,77 @@
 
 | Phase | Name | Status |
 | ----- | ---- | ------ |
+| 4L | Scene Switching & Spawn Point | Not Started |
+| 4M | Scene Bundle & Preload | Not Started |
+| PM5 | Weather & Environmental Effects | Not Started |
+| PM6 | Advanced Vision & Atmosphere | Not Started |
+
+Phases 4A–4K and PM1–PM4 complete. See `.project/.archive/features/play-area/` for archived phase details.
+
+---
+
+## Phase 4L: Scene Switching & Spawn Point
+
+**Dependencies:** editor Phase 5H
+
+### Tasks
+- [ ] Prisma: add `spawnX Float?` and `spawnY Float?` to `Scene` (world coordinates; null = scene center)
+- [ ] Editor: add a Spawn Point tool (DM only) that places/moves a spawn marker; autosaves via `PATCH /api/campaigns/:id/scenes/:sceneId`; marker is never rendered for players
+- [ ] Include spawn point in editor 5H scene duplicate
+- [ ] Shared constants: `SCENE_ACTIVATE: 'play-area:scene:activate'`, `SCENE_ACTIVATED: 'play-area:scene:activated'`
+- [ ] Shared types/validators: `SceneActivatePayload` { campaignId, sceneId }, `SceneActivatedPayload` { campaignId, sceneId, relocatedTokens }
+- [ ] Server handler for `play-area:scene:activate`: DM only; validates the scene belongs to the campaign; in one transaction clears `isActive` on the previous scene, sets it on the target, and moves every `type = player` token to the target scene
+- [ ] Spawn formation: place player tokens in a spiral around the spawn point, snapped to grid cells, skipping occupied cells and cells outside scene bounds
+- [ ] Leave monster, NPC, and misc tokens on their own scenes
+- [ ] Reset session-only state on switch: end active initiative, clear drawings, measurements, and temporary lights from the previous scene
+- [ ] Broadcast `play-area:scene:activated` to `campaign:{id}` (including sender); all clients unload the current scene and load the new one
+- [ ] Update campaigns 3B invite flow so newly invited players get their token on the active scene at its spawn point
+- [ ] Add activation controls to the editor's `SceneStrip` (5H): live badge on the active scene, "Activate" action with confirmation on each card (DM only)
+- [ ] Add a GSAP fade transition overlay on all clients while the new scene loads
+- [ ] Write tests: RBAC (player/observer rejected), cross-campaign scene rejection, single-active invariant under concurrent activations, spawn formation (occupied/out-of-bounds cells), non-player tokens untouched, session state reset, broadcast payload, reconnect lands on the new active scene
+
+### Decisions
+- The whole party moves together — every player token is relocated to the spawn point on activation; split parties are out of scope
+- Activation is a socket intent (not REST) because it's a live-session action that must broadcast atomically
+- Scene switching lives in the editor's `SceneStrip` — the DM enters editor mode to switch scenes; there is no separate play-mode switcher
+- Fog regions and fog exploration are scene-scoped and persist, so returning to a scene restores what players already explored
+- Initiative ends on scene switch — combat doesn't carry across maps
+
+---
+
+## Phase 4M: Scene Bundle & Preload
+
+**Dependencies:** Phase 4L
+
+### Tasks
+- [ ] `GET /api/campaigns/:id/scenes/:sceneId/bundle` — returns scene, tokens, placements (with asset URLs), walls, lights, fog regions, and fog config in one response, loaded in parallel inside one read transaction
+- [ ] Role-filter the bundle exactly like the existing individual endpoints (e.g. walls stay DM-only); players may only request the active scene
+- [ ] Add a scene `version` (max `updatedAt` across scene children) to the bundle; support `ETag` / `If-None-Match` → 304
+- [ ] Shared type: `SceneBundle`
+- [ ] Replace the 7 separate play-area mount requests with one bundle request; a single owner component distributes initial data to hooks via props (no duplicate fetching hooks)
+- [ ] Client scene cache: in-memory LRU of recent bundles (size as a named constant), invalidated by existing socket update events
+- [ ] Texture lifecycle: preload with PixiJS `Assets.backgroundLoad`; `Assets.unload` textures of scenes evicted from the cache to bound GPU memory
+- [ ] DM "Stage scene" action in the `SceneStrip` card context menu: emits `play-area:scene:stage` (DM only) → server broadcasts `play-area:scene:staged` with asset URLs only, so clients warm textures before activation
+- [ ] Show a loading progress indicator in the scene transition overlay
+- [ ] Write tests: bundle parity with individual endpoints per role, player blocked from inactive scenes, 304 path, cache eviction + texture unload, stage event RBAC, payload contains no scene data beyond asset URLs
+
+### Performance Targets
+- One HTTP request for scene data on load or switch
+- Scene switch under 1s with staged/cached assets; under 2.5s cold for a 4096×4096 background
+
+### Decisions
+- Keep the individual endpoints for incremental updates; the bundle is for initial load and scene switch only
+- Staging sends asset URLs only, never scene metadata, to keep spoiler exposure minimal
 
 ---
 
 ## Post-MVP Phases
 
-## Phase PM3: Fog of War - Line of Sight & Obstacles (Post-MVP)
-
-**Dependencies:** Phase PM2 + obstacle/wall geometry model
-
-**Notes:** `.project/notes/play-area-line-of-sight.md`
-
-### Goals
-
-- Move from open-circle reveals to obstacle-aware visibility polygons
-- Establish the wall and obstacle geometry needed for accurate vision blocking and future lighting systems
-
-### Tasks
-
-- [ ] Add a wall or obstacle geometry model for scenes (`WallSegment` or equivalent obstacle primitives)
-- [ ] Persist obstacle geometry per scene and expose REST/socket contracts for play-area visibility consumers
-- [ ] Implement raycasting from units or reveal emitters to generate wall-aware visibility polygons
-- [ ] Add angular-offset corner casting to prevent clipping at obstacle vertices
-- [ ] Limit raycast work with spatial partitioning or local obstacle bucketing instead of full-scene scans
-- [ ] Throttle or schedule LOS recomputation so visibility updates remain smooth under movement
-- [ ] Render LOS polygons into the PM2 mask pipeline rather than treating raycasting as a separate overlay system
-- [ ] Shared types: `WallSegment`, `ObstacleBounds`, `VisibilityPolygon`, `RaycastHit`
-- [ ] Socket events: `play-area:vision:refresh`, `play-area:vision:updated`
-- [ ] Tests: ray-segment intersection math, polygon sorting, obstacle culling, LOS throttling, role-safe delivery
-
-### Performance Targets
-
-- Maintain 60 FPS with at least 4 moving LOS emitters and 200+ relevant obstacle segments in the active area
-- Keep LOS recomputation under 8 ms for a standard combat scene after spatial filtering
-
-### Open Questions
-
-- Does obstacle geometry live primarily in play-area data, editor data, or a shared scene package between both?
-- Should observers follow player LOS, DM-selected LOS, or a separate read-only camera mode?
-
----
-
-## Phase PM4: Dynamic Light Sources (Post-MVP)
-
-**Dependencies:** Phase PM2
-
-**Notes:** `.project/notes/play-area-lighting-effects.md`
-
-### Goals
-
-- Add real-time ambient and authored light emitters that make scenes feel alive
-- Provide reusable lighting primitives that can later share geometry with PM3 obstacle-aware visibility
-
-### Tasks
-
-- [ ] Add scene light emitters (torch, fireplace, lantern, aura beacon, custom) with DM-authored placement/configuration
-- [ ] Implement additive-blend light sprites or textures with configurable color, intensity, radius, and falloff
-- [ ] Add organic flicker animation patterns for fire and candle sources without repetitive visual loops
-- [ ] Support optional wall-aware clipping once PM3 obstacle geometry is available
-- [ ] Add warm/cold light preset templates and per-emitter animation toggles
-- [ ] Add decorative secondary effects such as ember particles for fireplace-class emitters
-- [ ] Shared types: `LightSource`, `LightEmitterType`, `LightAnimationMode`, `LightSourceUpdatePayload`
-- [ ] Socket events: `play-area:light:create`, `play-area:light:update`, `play-area:light:updated`, `play-area:light:delete`
-- [ ] Tests: light emitter serialization, flicker determinism bounds, DM-only controls, render-budget guardrails
-
-### Performance Targets
-
-- Support 50+ simultaneous dynamic lights without visible frame drops on a typical map
-- Keep per-frame light animation work under 3 ms before optional LOS clipping is applied
-
-### Open Questions
-
-- Should dynamic lights be authored in the editor only, or can DMs place temporary lights live in the play area?
-- Which light properties must stay synchronized in real time versus being recalculated client-side?
-
----
-
 ## Phase PM5: Weather & Environmental Effects (Post-MVP)
 
-**Dependencies:** Phase 4A
+**Dependencies:** Phase 4A, editor Phase 5J
 
-**Notes:** `.project/notes/play-area-environmental-effects.md`
+**Notes:** `.project/notes/play-area-PM5-environmental-effects.md`
 
 ### Goals
 
@@ -103,9 +93,9 @@
 - [ ] Add particle-driven weather presets for rain, snow, drifting ash, and scene haze
 - [ ] Evaluate `@pixi/particle-emitter` or equivalent particle tooling against current workspace constraints
 - [ ] Add displacement/filter-based effects for heat shimmer, magical distortion, or water haze where appropriate
-- [ ] Support per-scene weather presets, intensity controls, and reduced-motion fallbacks
+- [ ] Read the authored `WeatherConfig` (editor 5J) as the scene default on load; apply reduced-motion fallbacks client-side
 - [ ] Define layering rules so weather does not obscure token readability, hover cards, or chat usability
-- [ ] Shared types: `WeatherPreset`, `WeatherConfig`, `EnvironmentalEffect`, `EffectIntensity`
+- [ ] Shared types: `WeatherOverridePayload`, `EnvironmentalEffect` (preset/config types are owned by editor 5J — don't duplicate)
 - [ ] Socket events: `play-area:weather:update`, `play-area:weather:updated`
 - [ ] Tests: emitter config validation, reduced-motion behavior, scene preset serialization, render-budget checks
 
@@ -118,6 +108,11 @@
 
 - Should weather be purely visual, or should later systems hook gameplay or visibility modifiers into it?
 - Which effects belong in PM5 versus PM6 polish to keep the first weather pass constrained?
+
+### Decisions
+
+- Authoring lives in the editor's `WeatherSection` (editor 5J); PM5 owns runtime rendering and live-session controls only
+- Socket weather overrides are ephemeral — they never persist to `Scene`; scene load always returns to the authored default
 
 ---
 
@@ -135,6 +130,7 @@
 ### Tasks
 
 - [ ] Combine PM2 fog masks, PM3 visibility polygons, and PM4 light emitters into a layered atmosphere stack
+- [ ] Wall-aware light clipping: clip PM4 light glows against PM3 obstacle geometry (deferred from PM4)
 - [ ] Add soft-shadow or penumbra-style edge treatments where vision and light meet obstacle boundaries
 - [ ] Add final scene controls for exploration mode, light intensity, atmosphere quality, and accessibility fallbacks
 - [ ] Validate effect ordering between fog, weather, tokens, overlays, and future status/aura rendering
@@ -149,8 +145,11 @@
 
 ### Open Questions
 
-- Do advanced atmosphere controls belong in the editor, live DM controls, or both?
 - What is the minimum visual fidelity we must preserve when reduced-motion or low-performance mode is active?
+
+### Decisions
+
+- Atmosphere authoring (walls, lights, scene presets) lives in editor 5F/5G; live session controls live in play-area — resolved by the PM3/PM4 split
 
 ---
 
@@ -160,11 +159,16 @@
 | ------------------- | ------------------------------------------- |
 | campaigns Phase 3A  | Play area lives within a campaign context   |
 | characters Phase 6A | Initiative tracker uses character modifiers |
+| editor Phase 5F     | PM3 LOS runtime consumes authored wall geometry |
+| editor Phase 5G     | PM4 renders authored light emitters |
+| editor Phase 5H     | 4L activates scenes managed by the Scene Library |
+| editor Phase 5J     | PM5 renders the authored `WeatherConfig` |
 
 | Depended On By      | Why                                                    |
 | ------------------- | ------------------------------------------------------ |
 | characters Phase 6B | Character-token linking renders on play area canvas    |
 | characters Phase 6C | Interactive rolls from sheets appear in play area chat |
+| editor Phase 5I     | Scene templates capture the 4L spawn point             |
 
 ---
 

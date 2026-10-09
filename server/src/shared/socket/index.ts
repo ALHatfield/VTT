@@ -1,6 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import type { Server } from 'socket.io';
 
+import { registerDiceHandlers } from '../../features/dice/dice.socket.js';
 import { registerPlayAreaHandlers } from '../../features/play-area/play-area.socket.js';
 
 /**
@@ -31,5 +32,6 @@ export function setupSocket(io: Server, sessionMiddleware: RequestHandler): void
 
   io.on('connection', (socket) => {
     registerPlayAreaHandlers(io, socket);
+    registerDiceHandlers(io, socket);
   });
 }

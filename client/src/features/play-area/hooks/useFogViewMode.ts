@@ -8,6 +8,6 @@ interface UseFogViewModeResult {
 }
 
 export function useFogViewMode(): UseFogViewModeResult {
-  const [fogViewMode, setFogViewMode] = useState<FogViewMode>('dm');
+  const [fogViewMode, setFogViewMode] = useState<FogViewMode>('player');
   return { fogViewMode, setFogViewMode };
 }

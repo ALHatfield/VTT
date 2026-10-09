@@ -55,13 +55,21 @@ enum CampaignRole {
   @@map("campaign_role")
 }
 
+enum GameSystem {
+  dnd5e
+  pf2e
+
+  @@map("game_system")
+}
+
 /// A campaign — the top-level workspace for a TTRPG session
 model Campaign {
-  id          String   @id @default(uuid())
+  id          String     @id @default(uuid())
   name        String
   description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  gameSystem  GameSystem @default(dnd5e) @map("game_system")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
 
   members    CampaignPlayer[]
   scenes     Scene[]
@@ -72,6 +80,9 @@ model Campaign {
   characters Character[]
   tileAssets TileAsset[]
   tilePlacements TilePlacement[]
+  wallSegments WallSegment[]
+  lightSources LightSource[]
+  characterTokens CharacterToken[]
 
   @@map("campaigns")
 }
@@ -126,6 +137,12 @@ model Scene {
   isActive   Boolean  @default(false) @map("is_active")
   /// PM2 fog mask configuration; null falls back to DEFAULT_FOG_MASK_CONFIG.
   fogConfig  Json?    @map("fog_config")
+  /// Editor 5G default atmosphere; rendered by play-area PM5.
+  weatherPreset WeatherPreset @default(none) @map("weather_preset")
+  /// Editor 5H scene library ordering — position within the campaign's scene strip.
+  sortOrder  Int      @default(0) @map("sort_order")
+  /// Editor 5H client-generated thumbnail, re-encoded server-side to WebP.
+  thumbnailUrl String? @map("thumbnail_url")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -134,6 +151,8 @@ model Scene {
   fogRegions FogRegion[]
   fogExploration FogExploration[]
   tilePlacements TilePlacement[]
+  wallSegments WallSegment[]
+  lightSources LightSource[]
 
   @@index([campaignId])
   @@map("scenes")
@@ -169,6 +188,7 @@ model Token {
   scene    Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   owner    User?    @relation("TokenOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  characterLink CharacterToken?
 
   @@index([sceneId])
   @@index([campaignId])
@@ -251,10 +271,12 @@ model FogExploration {
 // Character models (Phase 6A)
 // ---------------------------------------------------------------------------
 
-/// A character sheet belonging to a user within a campaign
+/// A character sheet belonging to a user within a campaign.
+/// campaignId null = global template (pregen) visible in every campaign;
+/// templates are cloned into a campaign when linked or assigned (Phase 6B).
 model Character {
   id              String   @id @default(uuid())
-  campaignId      String   @map("campaign_id")
+  campaignId      String?  @map("campaign_id")
   userId          String   @map("user_id")
   name            String
   race            String
@@ -266,17 +288,43 @@ model Character {
   ac              Int      @default(10)
   proficiencyBonus Int     @default(2) @map("proficiency_bonus")
   speed           Int      @default(30)
+  /// Skill proficiency names for interactive rolling (Phase 6C)
+  skillProficiencies Json  @default("[]") @map("skill_proficiencies")
+  /// Weapon/attack entries for interactive rolling (Phase 6C)
+  attacks         Json     @default("[]")
+  /// Spell entries with prepared state (Phase 6D)
+  spells          Json     @default("[]")
+  /// Spell slot max/used per level 1-9 (Phase 6D)
+  spellSlots      Json     @default("[]") @map("spell_slots")
   portraitUrl     String?  @map("portrait_url")
   biography       String?
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   user     User     @relation("CharacterOwner", fields: [userId], references: [id], onDelete: Cascade)
+  tokenLink CharacterToken?
 
   @@index([campaignId])
   @@index([userId])
   @@map("characters")
+}
+
+/// Links a character sheet to a canvas token (Phase 6B).
+/// One-to-one on both sides: a character drives at most one token and vice versa.
+model CharacterToken {
+  id          String   @id @default(uuid())
+  campaignId  String   @map("campaign_id")
+  characterId String   @unique @map("character_id")
+  tokenId     String   @unique @map("token_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  token     Token     @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@map("character_tokens")
 }
 
 // ---------------------------------------------------------------------------
@@ -347,4 +395,89 @@ model TilePlacement {
   @@index([sceneId])
   @@index([campaignId])
   @@map("tile_placements")
+}
+
+// ---------------------------------------------------------------------------
+// Editor models (Phase 5F)
+// ---------------------------------------------------------------------------
+
+/// A wall segment on a scene — raycasting input for play-area PM3 line of sight
+model WallSegment {
+  id             String   @id @default(uuid())
+  sceneId        String   @map("scene_id")
+  campaignId     String   @map("campaign_id")
+  x1             Float
+  y1             Float
+  x2             Float
+  y2             Float
+  blocksLight    Boolean  @default(true) @map("blocks_light")
+  blocksMovement Boolean  @default(true) @map("blocks_movement")
+  isDoor         Boolean  @default(false) @map("is_door")
+  isOpen         Boolean  @default(false) @map("is_open")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  scene    Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, sceneId])
+  @@map("wall_segments")
+}
+
+// ---------------------------------------------------------------------------
+// Editor models (Phase 5G)
+// ---------------------------------------------------------------------------
+
+enum LightEmitterType {
+  torch
+  fireplace
+  lantern
+  beacon
+  custom
+
+  @@map("light_emitter_type")
+}
+
+enum LightAnimationMode {
+  none
+  flicker
+  pulse
+
+  @@map("light_animation_mode")
+}
+
+enum WeatherPreset {
+  none
+  rain
+  snow
+  haze
+
+  @@map("weather_preset")
+}
+
+/// An authored light emitter on a scene — rendered by play-area PM4
+model LightSource {
+  id            String             @id @default(uuid())
+  sceneId       String             @map("scene_id")
+  campaignId    String             @map("campaign_id")
+  x             Float
+  y             Float
+  /// Radius in grid cells
+  radius        Float
+  color         String
+  intensity     Float
+  falloff       Float
+  emitterType   LightEmitterType   @map("emitter_type")
+  animationMode LightAnimationMode @default(none) @map("animation_mode")
+  animationSeed Int                @map("animation_seed")
+  /// Players see this light's glow and lit area even without line of sight
+  alwaysVisible Boolean            @default(false) @map("always_visible")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  scene    Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, sceneId])
+  @@map("light_sources")
 }

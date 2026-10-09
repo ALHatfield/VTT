@@ -5,6 +5,7 @@ import { useParams } from 'react-router-dom';
 import type {
     ChatMessage,
     ChatReceivedPayload,
+    DoorToggledPayload,
     DrawClearedPayload,
     DrawStrokeRelayedPayload,
     FogConfigUpdatedPayload,
@@ -16,16 +17,20 @@ import type {
     FogVertex,
     InitiativeState,
     InitiativeUpdatedPayload,
+    LightsUpdatedPayload,
     MapData,
     MeasureClearedPayload,
     MeasureRelayedPayload,
     TileAsset,
+    TilePlacement,
+    Token,
     TokenCreatedPayload,
     TokenDeletedPayload,
     TokenMovedPayload,
     TokenUpdatedPayload,
     TokenVisionReveal,
     TokenVisionSyncPayload,
+    WallsUpdatedPayload,
 } from '@vtt/shared';
 import {
     DEFAULT_GRID_ALPHA,
@@ -37,40 +42,55 @@ import {
 } from '@vtt/shared';
 
 import { useAuth } from '../auth/AuthContext';
+import { DiceOverlay } from '../dice/components/DiceOverlay';
+import { DiceRollerButton } from '../dice/components/DiceRollerButton';
+import { use3dDiceReveal } from '../dice/hooks/use3dDiceReveal';
+import { useDiceSettings } from '../dice/hooks/useDiceSettings';
 import { AssetLibrary } from '../editor/components/AssetLibrary';
 import { GridAlignmentModal } from '../editor/components/GridAlignmentModal';
 import { LayersPanel } from '../editor/components/LayersPanel';
+import { SceneStrip } from '../editor/components/SceneStrip';
 import { SmartSizingPrompt } from '../editor/components/SmartSizingPrompt';
 import { TileContextMenu } from '../editor/components/TileContextMenu';
+import { WallToolOverlay } from '../editor/components/WallToolOverlay';
 import { EditorModeProvider, useEditorMode } from '../editor/EditorModeContext';
+import { useLightEditor } from '../editor/hooks/useLightEditor';
+import { useSaveStatus } from '../editor/hooks/useSaveStatus';
+import { useScenes } from '../editor/hooks/useScenes';
+import { useSceneThumbnail } from '../editor/hooks/useSceneThumbnail';
 import { useTileAssets } from '../editor/hooks/useTileAssets';
 import { useTileDragDrop } from '../editor/hooks/useTileDragDrop';
 import { useTilePlacements } from '../editor/hooks/useTilePlacements';
+import { useUndoableCrud } from '../editor/hooks/useUndoableCrud';
+import { useUndoRedo } from '../editor/hooks/useUndoRedo';
+import { useWallEditor } from '../editor/hooks/useWallEditor';
+import { resolveDisplayScene } from '../editor/utils/resolve-display-scene';
+import { editorSaveTracker } from '../editor/utils/save-tracker';
 import { CampaignToolbar } from './components/CampaignToolbar';
 import type { DrawShapeKind } from './components/CanvasToolbar';
 import { CanvasToolbar } from './components/CanvasToolbar';
 import { ChatPanel } from './components/ChatPanel';
-import { DiceOverlay } from './components/DiceOverlay';
-import { DiceRollerButton } from './components/DiceRollerButton';
+import { DoorPopover } from './components/DoorPopover';
 import { TokenHoverCard } from './components/TokenHoverCard';
 import { TurnTracker } from './components/TurnTracker';
-import { use3dDiceReveal } from './hooks/use3dDiceReveal';
 import { useActiveScene } from './hooks/useActiveScene';
 import { useCampaignRole } from './hooks/useCampaignRole';
 import { useCanvas } from './hooks/useCanvas';
 import { useChatMessages } from './hooks/useChatMessages';
-import { useDiceSettings } from './hooks/useDiceSettings';
 import { useDrawTool } from './hooks/useDrawTool';
 import { useFogConfig } from './hooks/useFogConfig';
 import { useFogExploration } from './hooks/useFogExploration';
 import { useFogRegions } from './hooks/useFogRegions';
 import { useFogViewMode } from './hooks/useFogViewMode';
+import { useLineOfSight } from './hooks/useLineOfSight';
 import { calcMeasureDistance, formatMeasureLabel, useMeasureTool } from './hooks/useMeasureTool';
 import { useNpcDrop } from './hooks/useNpcDrop';
+import { usePlayAreaLighting } from './hooks/usePlayAreaLighting';
 import { usePlayAreaSocket } from './hooks/usePlayAreaSocket';
+import { useTemporaryLightDrop } from './hooks/useTemporaryLightDrop';
 import { useTokens } from './hooks/useTokens';
 import { useToolMode } from './hooks/useToolMode';
-import { filterVisionRevealsForFogPreview } from './hooks/vision-filter';
+import { filterTokensByPartySight, filterVisionRevealsForFogPreview } from './hooks/vision-filter';
 import styles from './PlayArea.module.css';
 
 // Fallback map data used while the real scene is loading
@@ -92,6 +112,19 @@ interface HoverState {
   tokenId: string;
   canvasX: number;
   canvasY: number;
+}
+
+function toTileCreatePayload({
+  assetId,
+  x,
+  y,
+  width,
+  height,
+  rotation,
+  zIndex,
+  category,
+}: TilePlacement): Omit<TilePlacement, 'id' | 'sceneId' | 'campaignId' | 'createdAt' | 'updatedAt'> {
+  return { assetId, x, y, width, height, rotation, zIndex, category };
 }
 
 function toRectangleVertices(a: FogVertex, b: FogVertex): FogVertex[] {
@@ -132,6 +165,45 @@ function PlayAreaInner(): ReactElement {
 
   const { scene, isLoading: sceneLoading } = useActiveScene(campaignId);
   const { role, playerColor } = useCampaignRole(campaignId, user?.id);
+
+  // Scene library (editor Phase 5H) — the DM edits the selected scene while
+  // players keep playing the active scene
+  const {
+    scenes,
+    isLoading: scenesLoading,
+    error: scenesError,
+    createScene,
+    updateScene: updateSceneMeta,
+    deleteScene,
+    duplicateScene,
+    reorderScenes,
+    uploadThumbnail,
+  } = useScenes(campaignId, role === 'dm');
+  const [editedSceneId, setEditedSceneId] = useState<string | null>(null);
+  useEffect(() => {
+    setEditedSceneId(null);
+  }, [campaignId]);
+
+  const isDmEditor = editorMode === 'editor' && role === 'dm';
+  // The scene shown on the canvas: the edited scene in editor mode, the active scene in play mode
+  const displayScene = useMemo(
+    () =>
+      resolveDisplayScene({
+        isEditorMode: editorMode === 'editor',
+        isDm: role === 'dm',
+        scenes,
+        editedSceneId,
+        activeScene: scene,
+      }),
+    [editorMode, role, scenes, editedSceneId, scene],
+  );
+  const displaySceneId = displayScene?.id;
+  // Session data (tokens, fog, vision, play lighting) belongs to the active
+  // scene — it is hidden while the DM edits a different scene
+  const isEditingInactiveScene = isDmEditor && displaySceneId !== scene?.id;
+  const isEditingInactiveSceneRef = useRef(isEditingInactiveScene);
+  isEditingInactiveSceneRef.current = isEditingInactiveScene;
+
   const {
     assets,
     isLoading: assetsLoading,
@@ -214,10 +286,28 @@ function PlayAreaInner(): ReactElement {
     addMessage: addMessageWithRollGate,
   });
 
-  const { placements, createPlacement, updatePlacement, deletePlacement } = useTilePlacements(
-    campaignId,
-    scene?.id,
-  );
+  // Editor undo/redo — one history shared by tiles, walls, and lights
+  const editorHistory = useUndoRedo({ shortcutsEnabled: editorMode === 'editor' && role === 'dm' });
+  const { clear: clearEditorHistory } = editorHistory;
+  useEffect(() => {
+    clearEditorHistory();
+  }, [displaySceneId, clearEditorHistory]);
+
+  const tilePlacements = useTilePlacements(campaignId, displaySceneId);
+  const { placements } = tilePlacements;
+  const {
+    create: createPlacement,
+    update: updatePlacement,
+    remove: deletePlacement,
+  } = useUndoableCrud({
+    history: editorHistory,
+    items: placements,
+    kind: 'tile',
+    create: tilePlacements.createPlacement,
+    update: tilePlacements.updatePlacement,
+    remove: tilePlacements.deletePlacement,
+    toCreatePayload: toTileCreatePayload,
+  });
 
   // Editor layer-panel state — hidden and locked tile IDs (client-side only; not persisted)
   const [hiddenTileIds, setHiddenTileIds] = useState<ReadonlySet<string>>(new Set());
@@ -254,6 +344,78 @@ function PlayAreaInner(): ReactElement {
     return map;
   }, [assets]);
 
+  // Wall & obstacle authoring (editor Phase 5F)
+  const {
+    sectionProps: wallsSectionProps,
+    toolOverlayProps: wallToolOverlayProps,
+    refreshWalls,
+  } = useWallEditor({
+    campaignId,
+    sceneId: displaySceneId,
+    canvasManager,
+    isReady,
+    isEditorMode: editorMode === 'editor',
+    isDm: role === 'dm',
+    cellSize: displayScene?.cellSize ?? DEFAULT_GRID_CELL_SIZE,
+    history: editorHistory,
+  });
+
+  // Light emitter authoring (editor Phase 5G)
+  const {
+    sectionProps: lightsSectionProps,
+    handleDragOver: handleLightDragOver,
+    handleDrop: handleLightDrop,
+    refreshLights,
+  } = useLightEditor({
+    campaignId,
+    sceneId: displaySceneId,
+    canvasManager,
+    isReady,
+    isEditorMode: editorMode === 'editor',
+    isDm: role === 'dm',
+    cellSize: displayScene?.cellSize ?? DEFAULT_GRID_CELL_SIZE,
+    history: editorHistory,
+  });
+
+  // Line of sight (Phase PM3) — server-computed polygons + interactive doors
+  const { fogViewMode, setFogViewMode } = useFogViewMode();
+  // The editor always sees the whole scene, regardless of the play-mode fog preview
+  const effectiveFogViewMode = editorMode === 'editor' ? 'dm' : fogViewMode;
+  const {
+    visibleLightIds,
+    visibleEnemyTokenIds,
+    handleVisionUpdated,
+    applyPendingPolygons,
+    handleDoorToggled,
+    selectedDoor,
+    handleDoorClick,
+    clearDoorSelection,
+    reset: resetLineOfSight,
+  } = useLineOfSight({
+    campaignId,
+    sceneId: scene?.id,
+    canvasManager,
+    isReady,
+    canToggleDoors: role === 'dm' || role === 'player',
+    partyViewOnly: role === 'dm' && effectiveFogViewMode === 'player',
+    canSeeAllLights: role === 'dm' && effectiveFogViewMode !== 'player',
+    hideUnseenEnemies: role === 'player' || (role === 'dm' && effectiveFogViewMode === 'player'),
+  });
+  const emitVisionRefreshRef = useRef<((sceneId: string) => void) | null>(null);
+
+  // Dynamic light rendering (Phase PM4) — lights behind walls stay dark for players (PM3)
+  const {
+    temporaryLights,
+    refresh: refreshLighting,
+    handleTemporaryLightsUpdated,
+  } = usePlayAreaLighting({
+    campaignId,
+    sceneId: scene?.id,
+    canvasManager,
+    isReady,
+    visibleLightIds,
+  });
+
   const {
     emitTokenMove,
     emitChatSend,
@@ -269,6 +431,11 @@ function PlayAreaInner(): ReactElement {
     emitInitiativeAdvance,
     emitInitiativeEnd,
     emitInitiativeReorder,
+    emitLightCreate,
+    emitLightUpdate,
+    emitLightDelete,
+    emitVisionRefresh,
+    emitDoorToggle,
     isConnected,
   } = usePlayAreaSocket({
     campaignId,
@@ -334,9 +501,15 @@ function PlayAreaInner(): ReactElement {
       },
       [applyRemoteExploration, scene?.id],
     ),
-    onVisionSync: useCallback((payload: TokenVisionSyncPayload) => {
-      setVisionReveals(payload.reveals);
-    }, []),
+    onVisionSync: useCallback(
+      (payload: TokenVisionSyncPayload) => {
+        // Same handler → one React batch, so reveals and LOS polygons render together
+        setVisionReveals(payload.reveals);
+        setVisionSceneId(payload.sceneId);
+        applyPendingPolygons();
+      },
+      [applyPendingPolygons],
+    ),
     onMeasureRelayed: useCallback(
       (payload: MeasureRelayedPayload) => {
         if (!canvasManager) return;
@@ -391,14 +564,70 @@ function PlayAreaInner(): ReactElement {
     onInitiativeUpdated: useCallback((payload: InitiativeUpdatedPayload) => {
       setInitiativeState(payload.state);
     }, []),
+    onWallsUpdated: useCallback(
+      (payload: WallsUpdatedPayload) => {
+        // The wall editor follows the edited scene; broadcasts for other scenes are ignored
+        if (payload.sceneId === displaySceneId) void refreshWalls();
+        // LOS only changes when the ACTIVE scene's walls change
+        if (role === 'dm' && payload.sceneId === scene?.id) {
+          emitVisionRefreshRef.current?.(payload.sceneId);
+        }
+      },
+      [refreshWalls, displaySceneId, scene?.id, role],
+    ),
+    onLightsUpdated: useCallback(
+      (payload: LightsUpdatedPayload) => {
+        if (payload.sceneId === displaySceneId) void refreshLights();
+        // Play lighting and LOS only follow the ACTIVE scene
+        if (payload.sceneId === scene?.id) {
+          void refreshLighting();
+          if (role === 'dm') emitVisionRefreshRef.current?.(payload.sceneId);
+        }
+      },
+      [refreshLights, refreshLighting, displaySceneId, scene?.id, role],
+    ),
+    onTemporaryLightsUpdated: handleTemporaryLightsUpdated,
+    onVisionUpdated: handleVisionUpdated,
+    onDoorToggled: useCallback(
+      (payload: DoorToggledPayload) => {
+        handleDoorToggled(payload);
+        // Keep the editor's wall cache in sync with play-mode door changes
+        if (role === 'dm' && payload.sceneId === scene?.id) void refreshWalls();
+      },
+      [handleDoorToggled, role, scene?.id, refreshWalls],
+    ),
     onReconnect: useCallback(() => {
       refresh();
       refreshFog();
       refreshFogConfig();
       refreshExploration();
+      void refreshWalls();
+      void refreshLights();
+      void refreshLighting();
       setVisionReveals([]);
-    }, [refresh, refreshFog, refreshFogConfig, refreshExploration]),
+      resetLineOfSight();
+    }, [
+      refresh,
+      refreshFog,
+      refreshFogConfig,
+      refreshExploration,
+      refreshWalls,
+      refreshLights,
+      refreshLighting,
+      resetLineOfSight,
+    ]),
   });
+
+  // Walls-updated arrives through the socket hook, which is what provides the emitter
+  useEffect(() => {
+    emitVisionRefreshRef.current = emitVisionRefresh;
+  }, [emitVisionRefresh]);
+
+  const handleToggleSelectedDoor = useCallback((): void => {
+    if (!scene?.id || !selectedDoor) return;
+    emitDoorToggle(scene.id, selectedDoor.id);
+    clearDoorSelection();
+  }, [scene?.id, selectedDoor, emitDoorToggle, clearDoorSelection]);
 
   // Gated roll entry point — ignores requests while the user's own roll is in flight
   const handleDiceRoll = useCallback(
@@ -419,6 +648,8 @@ function PlayAreaInner(): ReactElement {
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedTokenIds, setSelectedTokenIds] = useState<ReadonlySet<string>>(new Set());
   const [visionReveals, setVisionReveals] = useState<TokenVisionReveal[]>([]);
+  // Reveals for another scene (or received before the scene loaded) must not apply here
+  const [visionSceneId, setVisionSceneId] = useState<string | null>(null);
   const [initiativeState, setInitiativeState] = useState<InitiativeState | null>(null);
 
   useEffect(() => {
@@ -426,17 +657,16 @@ function PlayAreaInner(): ReactElement {
   }, [campaignId]);
 
   const { activeTool, setActiveTool } = useToolMode();
-  const { fogViewMode, setFogViewMode } = useFogViewMode();
 
   const visibleVisionReveals = useMemo(
     (): TokenVisionReveal[] =>
       filterVisionRevealsForFogPreview({
-        reveals: visionReveals,
+        reveals: visionSceneId === scene?.id ? visionReveals : [],
         tokens,
         role,
-        fogViewMode,
+        fogViewMode: effectiveFogViewMode,
       }),
-    [visionReveals, tokens, role, fogViewMode],
+    [visionReveals, visionSceneId, scene?.id, tokens, role, effectiveFogViewMode],
   );
 
   // Observer defaults to Pan tool once role loads
@@ -507,26 +737,26 @@ function PlayAreaInner(): ReactElement {
     setSelectedTokenIds(new Set());
   }, [canvasManager]);
 
-  // Build MapData from the active scene (or use fallback while loading)
+  // Build MapData from the displayed scene (or use fallback while loading)
   const mapData = useMemo((): MapData => {
-    if (!scene) {
+    if (!displayScene) {
       return { ...FALLBACK_MAP, campaignId: campaignId ?? '' };
     }
     return {
-      id: scene.id,
-      campaignId: scene.campaignId,
-      name: scene.name,
-      imageUrl: scene.imageUrl,
-      width: scene.width,
-      height: scene.height,
+      id: displayScene.id,
+      campaignId: displayScene.campaignId,
+      name: displayScene.name,
+      imageUrl: displayScene.imageUrl,
+      width: displayScene.width,
+      height: displayScene.height,
       gridConfig: {
-        cellSize: scene.cellSize,
+        cellSize: displayScene.cellSize,
         visible: true,
         color: DEFAULT_GRID_COLOR,
         alpha: DEFAULT_GRID_ALPHA,
       },
     };
-  }, [scene, campaignId]);
+  }, [displayScene, campaignId]);
 
   // Load map into canvas when canvas is ready and scene is available
   useEffect(() => {
@@ -568,12 +798,14 @@ function PlayAreaInner(): ReactElement {
       const next = prev === tokenId ? null : tokenId;
       canvasManager.setTokenSelected(next, prev);
       setSelectedTokenId(next);
-      // Token selection is exclusive — deselect any highlighted tile.
+      // Token selection is exclusive — deselect any highlighted tile or door.
       canvasManager.clearTileSelection();
+      clearDoorSelection();
     };
 
     canvasManager.onBackgroundClick = (): void => {
       clearMultiTokenSelection();
+      clearDoorSelection();
       const current = selectedTokenIdRef.current;
       if (current) {
         canvasManager.setTokenSelected(null, current);
@@ -601,14 +833,19 @@ function PlayAreaInner(): ReactElement {
       // Clear single-token hover card when rubber-band selects multiple
       setSelectedTokenId(null);
       setHoveredToken(null);
+      clearDoorSelection();
     };
-  }, [canvasManager, moveToken, emitTokenMove, clearMultiTokenSelection]);
+  }, [canvasManager, moveToken, emitTokenMove, clearMultiTokenSelection, clearDoorSelection]);
 
   // Sync token list to canvas whenever tokens or user/role changes
+  const sightedTokens = useMemo(
+    (): Token[] => filterTokensByPartySight(tokens, visibleEnemyTokenIds),
+    [tokens, visibleEnemyTokenIds],
+  );
   useEffect(() => {
     if (!canvasManager || !isReady || !user || !role) return;
-    canvasManager.setTokens(tokens, user.id, role);
-  }, [canvasManager, isReady, tokens, user, role]);
+    canvasManager.setTokens(isEditingInactiveScene ? [] : sightedTokens, user.id, role);
+  }, [canvasManager, isReady, sightedTokens, user, role, isEditingInactiveScene]);
 
   // Editor mode: sync tile placements to canvas
   useEffect(() => {
@@ -658,7 +895,9 @@ function PlayAreaInner(): ReactElement {
       // "Playground" assets are token art — create a Token (image portrait, grid-sized,
       // clickable for stats) instead of a decorative TilePlacement.
       if (category === 'playground' && asset) {
-        const cellSize = scene?.cellSize ?? DEFAULT_GRID_CELL_SIZE;
+        // Tokens are session data on the active scene — don't create them while editing another scene
+        if (isEditingInactiveSceneRef.current) return;
+        const cellSize = displayScene?.cellSize ?? DEFAULT_GRID_CELL_SIZE;
         const gridX = Math.max(0, Math.round(x / cellSize));
         const gridY = Math.max(0, Math.round(y / cellSize));
         // Derive a token name from the asset filename (strip extension), capped to Prisma column length.
@@ -678,7 +917,8 @@ function PlayAreaInner(): ReactElement {
       const isEmpty = canvasManager.getBackgroundLayerTilePlacementCount() === 0;
       const isLarger =
         asset !== undefined &&
-        (asset.width > (scene?.width ?? 2048) || asset.height > (scene?.height ?? 2048));
+        (asset.width > (displayScene?.width ?? 2048) ||
+          asset.height > (displayScene?.height ?? 2048));
 
       if (isBg && isEmpty && isLarger && asset) {
         // Ask user before creating — SmartSizingPrompt will call createPlacement
@@ -708,7 +948,7 @@ function PlayAreaInner(): ReactElement {
   }, [
     canvasManager,
     assetsMap,
-    scene,
+    displayScene,
     createPlacement,
     createToken,
     updatePlacement,
@@ -729,9 +969,9 @@ function PlayAreaInner(): ReactElement {
   useEffect(() => {
     if (!canvasManager || !isReady || !role) return;
     // DM sees player view when fogViewMode is 'player', otherwise sees DM debug view
-    const obfuscate = role !== 'dm' || fogViewMode === 'player';
-    canvasManager.setFogRegions(fogRegions, obfuscate);
-  }, [canvasManager, isReady, fogRegions, role, fogViewMode]);
+    const obfuscate = role !== 'dm' || effectiveFogViewMode === 'player';
+    canvasManager.setFogRegions(isEditingInactiveScene ? [] : fogRegions, obfuscate);
+  }, [canvasManager, isReady, fogRegions, role, effectiveFogViewMode, isEditingInactiveScene]);
 
   // PM2 mask pipeline — scene fog settings and persisted exploration
   useEffect(() => {
@@ -741,8 +981,17 @@ function PlayAreaInner(): ReactElement {
 
   useEffect(() => {
     if (!canvasManager || !isReady) return;
-    canvasManager.setFogExploration(explorationStamps);
-  }, [canvasManager, isReady, explorationStamps]);
+    canvasManager.setFogExploration(isEditingInactiveScene ? [] : explorationStamps);
+  }, [canvasManager, isReady, explorationStamps, isEditingInactiveScene]);
+
+  // Active-scene light glow belongs to the play session — hide it while editing another scene
+  useEffect(() => {
+    if (!canvasManager || !isReady) return;
+    canvasManager.lightLayer.visible = !isEditingInactiveScene;
+    return (): void => {
+      canvasManager.lightLayer.visible = true;
+    };
+  }, [canvasManager, isReady, isEditingInactiveScene]);
 
   const handleFogConfigChange = useCallback(
     (patch: Partial<FogMaskConfig>): void => {
@@ -763,8 +1012,8 @@ function PlayAreaInner(): ReactElement {
 
   useEffect(() => {
     if (!canvasManager || !isReady) return;
-    canvasManager.setTokenVisionReveals(visibleVisionReveals);
-  }, [canvasManager, isReady, visibleVisionReveals]);
+    canvasManager.setTokenVisionReveals(isEditingInactiveScene ? [] : visibleVisionReveals);
+  }, [canvasManager, isReady, visibleVisionReveals, isEditingInactiveScene]);
 
   useEffect(() => {
     if (!canvasManager || !isReady) return;
@@ -841,6 +1090,19 @@ function PlayAreaInner(): ReactElement {
     });
     setHoveredToken(null);
   }, [canvasManager]);
+
+  // Door selection is exclusive with token selection
+  useEffect(() => {
+    if (!canvasManager) return;
+    canvasManager.onDoorSelect = (wallId): void => {
+      clearMultiTokenSelection();
+      handleCloseCard();
+      handleDoorClick(wallId);
+    };
+    return (): void => {
+      canvasManager.onDoorSelect = undefined;
+    };
+  }, [canvasManager, clearMultiTokenSelection, handleCloseCard, handleDoorClick]);
 
   const handleHPChange = useCallback(
     (tokenId: string, hp: number): void => {
@@ -1104,22 +1366,50 @@ function PlayAreaInner(): ReactElement {
     isActive: isNpcPlaceActive,
   });
 
-  // Each handler guards on its own MIME type and active mode, so they are safe to
-  // call in sequence — only the matching handler will call e.preventDefault().
+  // Temporary DM light drag-drop (Phase PM4)
+  const handleTemporaryLightIntensityChange = useCallback(
+    (lightId: string, intensity: number): void => {
+      if (!campaignId || !scene?.id) return;
+      emitLightUpdate({ campaignId, sceneId: scene.id, lightId, changes: { intensity } });
+    },
+    [campaignId, scene?.id, emitLightUpdate],
+  );
+  const handleTemporaryLightDelete = useCallback(
+    (lightId: string): void => {
+      if (!campaignId || !scene?.id) return;
+      emitLightDelete({ campaignId, sceneId: scene.id, lightId });
+    },
+    [campaignId, scene?.id, emitLightDelete],
+  );
+  const { handleDragOver: handleTempLightDragOver, handleDrop: handleTempLightDrop } =
+    useTemporaryLightDrop({
+      canvasManager,
+      campaignId,
+      sceneId: scene?.id,
+      isActive: activeTool === 'light-place' && role === 'dm',
+      emitLightCreate,
+    });
+
+  // Each drop handler guards on its own MIME type and active mode, so only the matching one
+  // acts. The tile handler accepts every drag-over in editor mode, which keeps drops enabled.
   const handleCombinedDragOver = useCallback(
     (e: DragEvent<HTMLDivElement>): void => {
       handleCanvasDragOver(e);
       handleNpcDragOver(e);
+      handleLightDragOver(e);
+      handleTempLightDragOver(e);
     },
-    [handleCanvasDragOver, handleNpcDragOver],
+    [handleCanvasDragOver, handleNpcDragOver, handleLightDragOver, handleTempLightDragOver],
   );
 
   const handleCombinedDrop = useCallback(
     (e: DragEvent<HTMLDivElement>): void => {
       handleCanvasDrop(e);
       handleNpcDrop(e);
+      handleLightDrop(e);
+      handleTempLightDrop(e);
     },
-    [handleCanvasDrop, handleNpcDrop],
+    [handleCanvasDrop, handleNpcDrop, handleLightDrop, handleTempLightDrop],
   );
 
   // -----------------------------------------------------------------------
@@ -1197,6 +1487,97 @@ function PlayAreaInner(): ReactElement {
     [deletePlacement, canvasManager],
   );
 
+  // -----------------------------------------------------------------------
+  // Scene library handlers (editor Phase 5H)
+  // -----------------------------------------------------------------------
+
+  // Aggregated save state across all editor persistence hooks
+  const {
+    status: saveStatus,
+    retry: retrySave,
+    savedCount,
+    pendingCount,
+    inFlightCount,
+  } = useSaveStatus();
+
+  // Save state must not leak across campaigns (stale "Saved" badge, stale retries)
+  useEffect(() => {
+    return (): void => {
+      editorSaveTracker.reset();
+    };
+  }, [campaignId]);
+
+  // Client-side thumbnail capture — debounced after successful writes (not on
+  // scene load), immediate on scene switch when the scene was edited
+  const { captureNow } = useSceneThumbnail({
+    canvasManager,
+    sceneId: displaySceneId,
+    enabled: isDmEditor,
+    contentVersion: savedCount,
+    uploadThumbnail,
+  });
+
+  // Snapshot the outgoing scene only when it actually changed since it was opened
+  const savedCountAtSwitchRef = useRef(0);
+  const captureIfEdited = useCallback((): void => {
+    const isDirty =
+      savedCount > savedCountAtSwitchRef.current || pendingCount > 0 || inFlightCount > 0;
+    if (isDirty) void captureNow();
+    savedCountAtSwitchRef.current = savedCount;
+  }, [savedCount, pendingCount, inFlightCount, captureNow]);
+
+  const handleSelectScene = useCallback(
+    (sceneId: string): void => {
+      if (sceneId === displaySceneId) return;
+      // Snapshot the outgoing scene while it is still on the canvas; pending
+      // debounced edits flush to the outgoing scene via each hook's cleanup
+      captureIfEdited();
+      setEditedSceneId(sceneId);
+    },
+    [displaySceneId, captureIfEdited],
+  );
+
+  const handleCreateScene = useCallback((): void => {
+    void createScene({ name: `Scene ${scenes.length + 1}` }).then((created) => {
+      if (created) {
+        captureIfEdited();
+        setEditedSceneId(created.id);
+      }
+    });
+  }, [createScene, scenes.length, captureIfEdited]);
+
+  const handleRenameScene = useCallback(
+    (sceneId: string, name: string): void => {
+      void updateSceneMeta(sceneId, { name });
+    },
+    [updateSceneMeta],
+  );
+
+  const handleDuplicateScene = useCallback(
+    (sceneId: string): void => {
+      void duplicateScene(sceneId);
+    },
+    [duplicateScene],
+  );
+
+  const handleDeleteScene = useCallback(
+    (sceneId: string): void => {
+      void deleteScene(sceneId).then((deleted) => {
+        if (deleted) {
+          setEditedSceneId((prev) => (prev === sceneId ? null : prev));
+        }
+      });
+    },
+    [deleteScene],
+  );
+
+  const handleReorderScenes = useCallback(
+    (sceneIds: string[]): void => {
+      void reorderScenes(sceneIds);
+    },
+    [reorderScenes],
+  );
+
   return (
     <div className={styles.layout}>
       <CampaignToolbar
@@ -1204,6 +1585,23 @@ function PlayAreaInner(): ReactElement {
         canToggleEditor={role === 'dm'}
         onToggleEditor={toggleMode}
       />
+      {/* Scene library strip — between the toolbar and the editor body (editor mode, DM only) */}
+      {isDmEditor && (
+        <SceneStrip
+          scenes={scenes}
+          editedSceneId={displaySceneId ?? null}
+          isLoading={scenesLoading}
+          error={scenesError}
+          saveStatus={saveStatus}
+          onRetrySave={retrySave}
+          onSelectScene={handleSelectScene}
+          onCreateScene={handleCreateScene}
+          onRenameScene={handleRenameScene}
+          onDuplicateScene={handleDuplicateScene}
+          onDeleteScene={handleDeleteScene}
+          onReorderScenes={handleReorderScenes}
+        />
+      )}
       <div className={styles.body}>
         {/* Editor mode panels — left of canvas */}
         {editorMode === 'editor' && campaignId && (
@@ -1236,6 +1634,9 @@ function PlayAreaInner(): ReactElement {
             drawStrokeWidth={drawStrokeWidth}
             onDrawStrokeWidthChange={setDrawStrokeWidth}
             onDrawClear={handleDrawClear}
+            temporaryLights={temporaryLights}
+            onTemporaryLightIntensityChange={handleTemporaryLightIntensityChange}
+            onTemporaryLightDelete={handleTemporaryLightDelete}
           />
         )}
         {/* Canvas area */}
@@ -1271,8 +1672,8 @@ function PlayAreaInner(): ReactElement {
                 if (!src) return;
                 void createPlacement({
                   assetId: src.assetId,
-                  x: src.x + (scene?.cellSize ?? 64),
-                  y: src.y + (scene?.cellSize ?? 64),
+                  x: src.x + (displayScene?.cellSize ?? 64),
+                  y: src.y + (displayScene?.cellSize ?? 64),
                   width: src.width,
                   height: src.height,
                   rotation: src.rotation,
@@ -1363,6 +1764,10 @@ function PlayAreaInner(): ReactElement {
               onPointerCancel={handleDrawPointerUp}
             />
           )}
+          {/* Wall tool overlay — captures pointer events for wall authoring (editor Phase 5F) */}
+          {wallToolOverlayProps && (
+            <WallToolOverlay key={displaySceneId} {...wallToolOverlayProps} />
+          )}
           {/* Zoom buttons — floating top-right of canvas, always visible in play mode */}
           {editorMode === 'play' && (
             <div className={styles.zoomButtons}>
@@ -1388,7 +1793,7 @@ function PlayAreaInner(): ReactElement {
           {editorMode === 'play' &&
             hoveredToken &&
             (() => {
-              const token = tokens.find((t) => t.id === hoveredToken.tokenId);
+              const token = sightedTokens.find((t) => t.id === hoveredToken.tokenId);
               if (!token) return null;
               return (
                 <TokenHoverCard
@@ -1407,6 +1812,15 @@ function PlayAreaInner(): ReactElement {
                 />
               );
             })()}
+          {/* Selected door controls (Phase PM3) */}
+          {editorMode === 'play' && selectedDoor && canvasManager && (
+            <DoorPopover
+              door={selectedDoor}
+              canvasManager={canvasManager}
+              onToggle={handleToggleSelectedDoor}
+              onClose={clearDoorSelection}
+            />
+          )}
           {/* 3D dice overlay — transparent Three.js canvas above the map (Phase PM1) */}
           {is3dDiceActive && (
             <DiceOverlay
@@ -1462,7 +1876,7 @@ function PlayAreaInner(): ReactElement {
             hiddenTileIds={hiddenTileIds}
             lockedTileIds={lockedTileIds}
             assets={assetsMap}
-            canvasGridSize={scene?.cellSize ?? DEFAULT_GRID_CELL_SIZE}
+            canvasGridSize={displayScene?.cellSize ?? DEFAULT_GRID_CELL_SIZE}
             onSelectTile={handleSelectTileFromPanel}
             onToggleVisibility={handleToggleVisibility}
             onToggleLock={handleToggleLock}
@@ -1471,6 +1885,8 @@ function PlayAreaInner(): ReactElement {
             onUpdateTile={updatePlacement}
             onDeleteSelectedTiles={handleBatchDeleteSelected}
             onAlignToGrid={setAlignmentPlacementId}
+            walls={wallsSectionProps ?? undefined}
+            lights={lightsSectionProps ?? undefined}
           />
         )}
       </div>
@@ -1485,7 +1901,7 @@ function PlayAreaInner(): ReactElement {
             <GridAlignmentModal
               placement={placement}
               asset={asset}
-              canvasGridSize={scene?.cellSize ?? DEFAULT_GRID_CELL_SIZE}
+              canvasGridSize={displayScene?.cellSize ?? DEFAULT_GRID_CELL_SIZE}
               onApply={(width, height) => {
                 updatePlacement(alignmentPlacementId, { width, height });
                 setAlignmentPlacementId(null);

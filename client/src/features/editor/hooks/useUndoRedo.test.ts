@@ -115,4 +115,150 @@ describe('useUndoRedo', () => {
 
     expect(cmd.execute).toHaveBeenCalledTimes(2); // initial + redo
   });
+
+  it('registers Ctrl+Y for redo on Windows/Linux and ignores Cmd', async () => {
+    const { result } = renderHook(() => useUndoRedo());
+    const cmd = { execute: vi.fn(), undo: vi.fn() };
+    act(() => { result.current.push(cmd); });
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true }));
+    });
+    expect(cmd.undo).not.toHaveBeenCalled();
+
+    await act(async () => { await result.current.undo(); });
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', ctrlKey: true }));
+    });
+    expect(cmd.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses Cmd+Z / Cmd+Shift+Z on macOS and ignores Ctrl and Cmd+Y', async () => {
+    const platform = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    const { result } = renderHook(() => useUndoRedo());
+    const cmd = { execute: vi.fn(), undo: vi.fn() };
+    act(() => { result.current.push(cmd); });
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }));
+    });
+    expect(cmd.undo).not.toHaveBeenCalled();
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true }));
+    });
+    expect(cmd.undo).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', metaKey: true }));
+    });
+    expect(cmd.execute).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, shiftKey: true }));
+    });
+    expect(cmd.execute).toHaveBeenCalledTimes(2);
+    platform.mockRestore();
+  });
+
+  it('groups records made in the same tick into one step', async () => {
+    const { result } = renderHook(() => useUndoRedo());
+    const a = { execute: vi.fn(), undo: vi.fn() };
+    const b = { execute: vi.fn(), undo: vi.fn() };
+    act(() => {
+      result.current.record(a);
+      result.current.record(b);
+    });
+
+    await act(async () => {
+      await result.current.undo();
+    });
+    expect(a.undo).toHaveBeenCalledTimes(1);
+    expect(b.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it('merges consecutive records with the same key inside the merge window', async () => {
+    const { result } = renderHook(() => useUndoRedo());
+    const first = { execute: vi.fn(), undo: vi.fn() };
+    const second = { execute: vi.fn(), undo: vi.fn() };
+    const older = { execute: vi.fn(), undo: vi.fn() };
+    await act(async () => {
+      result.current.record(older);
+      await Promise.resolve();
+      result.current.record(first, 'tile:1:x');
+      await Promise.resolve();
+      vi.advanceTimersByTime(200);
+      result.current.record(second, 'tile:1:x');
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await result.current.undo();
+    });
+    expect(first.undo).toHaveBeenCalledTimes(1);
+    expect(second.undo).not.toHaveBeenCalled();
+    expect(older.undo).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.redo();
+    });
+    expect(second.execute).toHaveBeenCalledTimes(1);
+    expect(first.execute).not.toHaveBeenCalled();
+  });
+
+  it('does not merge once the merge window has passed', async () => {
+    const { result } = renderHook(() => useUndoRedo());
+    const first = { execute: vi.fn(), undo: vi.fn() };
+    const second = { execute: vi.fn(), undo: vi.fn() };
+    await act(async () => {
+      result.current.record(first, 'k');
+      await Promise.resolve();
+      vi.advanceTimersByTime(5000);
+      result.current.record(second, 'k');
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await result.current.undo();
+    });
+    expect(second.undo).toHaveBeenCalledTimes(1);
+    expect(first.undo).not.toHaveBeenCalled();
+  });
+
+  it('resolves chained id aliases', () => {
+    const { result } = renderHook(() => useUndoRedo());
+    act(() => {
+      result.current.aliasId('a', 'b');
+      result.current.aliasId('a', 'c');
+    });
+    expect(result.current.resolveId('a')).toBe('c');
+    expect(result.current.resolveId('b')).toBe('c');
+  });
+
+  it('leaves Ctrl+Z to text inputs', async () => {
+    const { result } = renderHook(() => useUndoRedo());
+    const cmd = { execute: vi.fn(), undo: vi.fn() };
+    act(() => { result.current.push(cmd); });
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+
+    expect(cmd.undo).not.toHaveBeenCalled();
+    input.remove();
+  });
+
+  it('ignores shortcuts when disabled', async () => {
+    const { result } = renderHook(() => useUndoRedo({ shortcutsEnabled: false }));
+    const cmd = { execute: vi.fn(), undo: vi.fn() };
+    act(() => { result.current.push(cmd); });
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }));
+    });
+
+    expect(cmd.undo).not.toHaveBeenCalled();
+  });
 });

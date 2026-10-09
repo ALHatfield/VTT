@@ -11,16 +11,17 @@ This is the largest feature area. It contains the live game canvas and all real-
 ## Sub-Features
 1. **Canvas & Map Rendering** — PixiJS layered canvas with map images and grid
 2. **Token System** — Interactive tokens with drag-and-drop, health, and status tracking
-3. **Dice Roller** — Roll commands in chat, future 3D physics-based dice integration
+3. **Dice Roller** — Hosted here, owned by the `dice` feature (see `feature-dice.instructions.md`)
 4. **Chat System** — Real-time messaging with dice command parsing
 5. **Fog of War** — DM-controlled visibility masking for players
 6. **Initiative & Turn Tracker** — Combat order management sidebar
 
 ## Canvas Architecture (PixiJS)
-Three-layer system rendered in order:
+Four-layer system rendered in order:
 1. **BackgroundLayer** (`PIXI.Container`): Map/tile images, static
-2. **PlaygroundLayer** (`PIXI.Container`): Grid overlay + interactive tokens
-3. **ForegroundLayer** (`PIXI.Container`): Fog of war, weather effects, lighting
+2. **LightLayer** (`PIXI.Container`, PM4): Additive light glow + embers
+3. **PlaygroundLayer** (`PIXI.Container`): Grid overlay + interactive tokens
+4. **ForegroundLayer** (`PIXI.Container`): Fog of war, weather effects
 
 Central `CanvasManager` class owns the `PIXI.Application` and manages all layers. Mount via React ref + `useCanvas()` hook.
 
@@ -35,19 +36,12 @@ Central `CanvasManager` class owns the `PIXI.Application` and manages all layers
 - All play area state changes go through Socket.IO, not REST
 - Campaign room: `campaign:{campaignId}` — all members join on connection
 - Event flow: client intent → server validation → broadcast to room
-- Key events: `token:move/moved`, `dice:roll/rolled`, `chat:send/received`, `fog:reveal/revealed`
+- Key events: `token:move/moved`, `chat:send/received`, `fog:reveal/revealed` (dice rolls use the dice-owned `dice:roll` intent)
 - 100ms debouncing for token drag movements
 - Event queuing during disconnection with replay on reconnect
 
 ## Dice Roller
-- Chat command parsing: `/roll 3d6+4`, `/roll d20 advantage`
-- Server-side roll generation (cryptographic RNG) — client never generates roll results
-- Roll results broadcast to campaign room with formula breakdown
-- **Future integration**: Standalone dice project (Three.js + cannon-es) at `~/Desktop/dice`
-  - `DiceDefinition` class with weighted faces
-  - `SceneManager` for 3D throw animations
-  - Physics simulation via cannon-es
-  - Plan: extract engine + renderer as an npm workspace package
+Dice rules, roll visibility, macros, history, and 3D rendering are owned by the `dice` feature — see `feature-dice.instructions.md` and `.project/features/dice.md`. All dice code lives in `features/dice/` (client and server) and `shared/src/{types,constants,validators}/dice.ts`. `PlayArea.tsx` composes `DiceOverlay`, `DiceRollerButton`, `useDiceSettings`, and `use3dDiceReveal` from `../dice/`; play area persists roll results as `roll` chat messages. Never add dice code under `play-area/`.
 
 ## Chat System
 - Messages persisted to `campaign_messages` table

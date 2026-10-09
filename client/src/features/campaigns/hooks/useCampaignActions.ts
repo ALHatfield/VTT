@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 
 /**
  * Provides update and delete mutations for a single campaign.
- * Does NOT fetch the campaign list — use useCampaignDetail for that.
+ * Does NOT fetch campaign data — the campaign detail fetch lives in CampaignContext.
  */
 export function useCampaignActions(): {
   updateCampaign: (id: string, payload: CampaignUpdatePayload) => Promise<Campaign>;

@@ -217,6 +217,28 @@ describe('ChatPanel', () => {
       expect(screen.getByText('14')).toBeDefined();
     });
 
+    it('renders the roll source label when present (Phase 6C)', () => {
+      const rollData = {
+        formula: 'd20+5',
+        label: 'DEX',
+        count: 1,
+        sides: 20,
+        rolls: [13],
+        keptRolls: [13],
+        modifier: 5,
+        advantage: false,
+        disadvantage: false,
+        total: 18,
+      };
+      const messages = [
+        makeMessage({ id: 'roll-2', username: 'Alice', type: 'roll', text: 'd20+5', rollData }),
+      ];
+      render(<ChatPanel {...defaultProps} messages={messages} />);
+
+      expect(screen.getByText('rolled d20+5 (DEX)')).toBeDefined();
+      expect(screen.getByText('18')).toBeDefined();
+    });
+
     it('renders roll message username', () => {
       const rollData = {
         formula: 'd20',

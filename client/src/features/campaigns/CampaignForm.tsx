@@ -1,8 +1,10 @@
-import type { Campaign, CampaignCreatePayload, CampaignUpdatePayload } from '@vtt/shared';
+import type { Campaign, CampaignCreatePayload, CampaignUpdatePayload, GameSystem } from '@vtt/shared';
+import { DEFAULT_GAME_SYSTEM, GAME_SYSTEM_IDS, GAME_SYSTEM_LABELS } from '@vtt/shared';
 import type { FormEvent, ReactElement } from 'react';
 import { useState } from 'react';
 
 import styles from './CampaignForm.module.css';
+import { GameSystemBadge } from './GameSystemBadge';
 
 interface CampaignFormProps {
   /** Existing campaign to edit — omit for create mode */
@@ -14,6 +16,9 @@ interface CampaignFormProps {
 export function CampaignForm({ existing, onSubmit, onCancel }: CampaignFormProps): ReactElement {
   const [name, setName] = useState(existing?.name ?? '');
   const [description, setDescription] = useState(existing?.description ?? '');
+  const [gameSystem, setGameSystem] = useState<GameSystem>(
+    existing?.gameSystem ?? DEFAULT_GAME_SYSTEM,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,14 +35,14 @@ export function CampaignForm({ existing, onSubmit, onCancel }: CampaignFormProps
 
     setIsSubmitting(true);
     try {
-      await onSubmit({
-        name: name.trim(),
-        // In edit mode, empty description sends null to clear the field.
-        // In create mode, empty description is omitted (undefined).
-        description: isEditMode
-          ? description.trim() || null
-          : description.trim() || undefined,
-      });
+      // In edit mode, empty description sends null to clear the field.
+      // In create mode, empty description is omitted (undefined).
+      // gameSystem is only sent on create — it is immutable after creation.
+      await onSubmit(
+        isEditMode
+          ? { name: name.trim(), description: description.trim() || null }
+          : { name: name.trim(), description: description.trim() || undefined, gameSystem },
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -66,6 +71,35 @@ export function CampaignForm({ existing, onSubmit, onCancel }: CampaignFormProps
           disabled={isSubmitting}
           required
         />
+      </div>
+
+      <div className={styles.field}>
+        <label htmlFor="campaign-game-system" className={styles.label}>
+          Game System {isEditMode ? null : <span className={styles.required}>*</span>}
+        </label>
+        {isEditMode && existing ? (
+          <div className={styles.systemLocked}>
+            <GameSystemBadge system={existing.gameSystem} />
+            <span className={styles.systemLockedNote}>
+              The game system cannot be changed after creation.
+            </span>
+          </div>
+        ) : (
+          <select
+            id="campaign-game-system"
+            className={styles.select}
+            value={gameSystem}
+            onChange={(e) => setGameSystem(e.target.value as GameSystem)}
+            disabled={isSubmitting}
+            required
+          >
+            {GAME_SYSTEM_IDS.map((id) => (
+              <option key={id} value={id}>
+                {GAME_SYSTEM_LABELS[id]}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className={styles.field}>

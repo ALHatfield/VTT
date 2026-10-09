@@ -1,11 +1,11 @@
 import type {
-  AuraCondition,
-  AuraType,
-  CampaignRole,
-  NpcSubtype,
-  Scene,
-  Token,
-  TokenType,
+    AuraCondition,
+    AuraType,
+    CampaignRole,
+    NpcSubtype,
+    Scene,
+    Token,
+    TokenType,
 } from '@vtt/shared';
 import { DEFAULT_TOKEN_COLOR, DEFAULT_TOKEN_SIZE, DEFAULT_VISION_RADIUS } from '@vtt/shared';
 
@@ -118,27 +118,43 @@ function randomPlayerColor(): string {
  * Return the active scene for a campaign, or auto-create a default one if none exists.
  */
 export async function getOrCreateActiveScene(campaignId: string): Promise<Scene> {
-  // Wrap in a transaction to prevent concurrent requests from creating duplicate active scenes
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.scene.findFirst({
-      where: { campaignId, isActive: true },
+  try {
+    // Wrap in a transaction to prevent concurrent requests from creating duplicate active scenes
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.scene.findFirst({
+        where: { campaignId, isActive: true },
+      });
+
+      if (existing) return toScene(existing);
+
+      // Append to the end of the scene library order (editor 5H)
+      const last = await tx.scene.aggregate({
+        where: { campaignId },
+        _max: { sortOrder: true },
+      });
+      const scene = await tx.scene.create({
+        data: {
+          campaignId,
+          name: 'Default Scene',
+          isActive: true,
+          width: 2048,
+          height: 2048,
+          cellSize: 70,
+          sortOrder: (last._max.sortOrder ?? -1) + 1,
+        },
+      });
+
+      return toScene(scene);
     });
-
-    if (existing) return toScene(existing);
-
-    const scene = await tx.scene.create({
-      data: {
-        campaignId,
-        name: 'Default Scene',
-        isActive: true,
-        width: 2048,
-        height: 2048,
-        cellSize: 70,
-      },
-    });
-
-    return toScene(scene);
-  });
+  } catch (err: unknown) {
+    // A concurrent request won the race to create the active scene — the 5H
+    // one-active-scene-per-campaign unique index rejected ours (P2002)
+    if ((err as { code?: string }).code === 'P2002') {
+      const raced = await prisma.scene.findFirst({ where: { campaignId, isActive: true } });
+      if (raced) return toScene(raced);
+    }
+    throw err;
+  }
 }
 
 /**

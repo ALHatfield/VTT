@@ -133,10 +133,17 @@ erDiagram
     Campaign ||--o{ Character : "characters"
     Campaign ||--o{ TileAsset : "tileAssets"
     Campaign ||--o{ TilePlacement : "tilePlacements"
+    Campaign ||--o{ WallSegment : "wallSegments"
+    Campaign ||--o{ LightSource : "lightSources"
+    Campaign ||--o{ CharacterToken : "characterTokens"
     Scene ||--o{ Token : "tokens"
     Scene ||--o{ FogRegion : "fogRegions"
     Scene ||--o{ FogExploration : "fogExploration"
     Scene ||--o{ TilePlacement : "tilePlacements"
+    Scene ||--o{ WallSegment : "wallSegments"
+    Scene ||--o{ LightSource : "lightSources"
+    Token ||--o| CharacterToken : "characterLink"
+    Character ||--o| CharacterToken : "tokenLink"
     TileAsset ||--o{ TilePlacement : "placements"
 
     User {
@@ -158,6 +165,7 @@ erDiagram
         uuid id PK
         string name
         string description
+        enum gameSystem "dnd5e | pf2e"
         datetime createdAt
         datetime updatedAt
     }
@@ -181,6 +189,9 @@ erDiagram
         int cellSize
         bool isActive
         json fogConfig
+        enum weatherPreset "none | rain | snow | haze"
+        int sortOrder
+        string thumbnailUrl
         datetime createdAt
         datetime updatedAt
     }
@@ -257,10 +268,22 @@ erDiagram
         int ac
         int proficiencyBonus
         int speed
+        json skillProficiencies
+        json attacks
+        json spells
+        json spellSlots
         string portraitUrl
         string biography
         datetime createdAt
         datetime updatedAt
+    }
+
+    CharacterToken {
+        uuid id PK
+        uuid campaignId FK
+        uuid characterId UK, FK
+        uuid tokenId UK, FK
+        datetime createdAt
     }
 
     TileAsset {
@@ -289,6 +312,40 @@ erDiagram
         float rotation
         int zIndex
         enum category "background | playground | foreground"
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    WallSegment {
+        uuid id PK
+        uuid sceneId FK
+        uuid campaignId FK
+        float x1
+        float y1
+        float x2
+        float y2
+        bool blocksLight
+        bool blocksMovement
+        bool isDoor
+        bool isOpen
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    LightSource {
+        uuid id PK
+        uuid sceneId FK
+        uuid campaignId FK
+        float x
+        float y
+        float radius
+        string color
+        float intensity
+        float falloff
+        enum emitterType "torch | fireplace | lantern | beacon | custom"
+        enum animationMode "none | flicker | pulse"
+        int animationSeed
+        bool alwaysVisible
         datetime createdAt
         datetime updatedAt
     }
@@ -383,7 +440,7 @@ flowchart TD
         E1["play-area:room:join → validate membership, join room, broadcast presence"]
         E2["play-area:token:move → ownership check, broadcast to others, schedule vision sync"]
         E3["play-area:chat:send → persist CampaignMessage, broadcast to room"]
-        E4["play-area:dice:roll → parse formula, roll, persist as message, broadcast"]
+        E4["dice:roll (alias play-area:dice:roll) → parse formula, roll, persist as message, broadcast"]
         E5["play-area:fog:reveal → DM only, persist FogRegion, broadcast"]
         E6["play-area:fog:hide → DM only, delete overlapping regions, broadcast"]
     end

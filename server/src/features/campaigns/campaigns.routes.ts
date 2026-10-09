@@ -54,8 +54,8 @@ router.post(
       return;
     }
 
-    const { name, description } = result.data;
-    const campaign = await createCampaign(req.session.userId!, name, description);
+    const { name, description, gameSystem } = result.data;
+    const campaign = await createCampaign(req.session.userId!, name, description, gameSystem);
     res.status(201).json({ data: campaign });
   }),
 );

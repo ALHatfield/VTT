@@ -12,7 +12,8 @@ applyTo: "**/prisma/**"
 
 ## Migrations
 - Run `npx prisma migrate dev --name descriptive-name` to generate migrations
-- Never edit generated migration SQL files manually
+- Never edit an already-applied migration; for raw SQL (backfills, partial indexes), use `npx prisma migrate dev --create-only`, edit the draft, then apply
+- When adding a constraint (unique index, check), grep test fixtures for writes that could violate it before running the full suite — e.g. the campaign invite flow lazily creates an active scene, so fixtures creating `isActive: true` scenes must deactivate existing ones first
 - Seed data goes in `prisma/seed.ts` — this includes the pre-seeded user accounts for MVP
 
 ## Client Usage

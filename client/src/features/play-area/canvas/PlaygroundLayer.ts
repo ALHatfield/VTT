@@ -1,15 +1,16 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
 
 import type { DrawPoint, DrawShapeType, GridConfig, Token } from '@vtt/shared';
 import { MEASURE_LINE_ALPHA, MEASURE_LINE_WIDTH } from '@vtt/shared';
 
+import { applyMapClip, type MapClipBounds } from './map-clip';
 import type { TilePlacementSprite } from './TilePlacementSprite';
 import type {
-  TokenClickCallback,
-  TokenDragStartCallback,
-  TokenDragStateCallback,
-  TokenHoverCallback,
-  TokenMoveEndCallback,
+    TokenClickCallback,
+    TokenDragStartCallback,
+    TokenDragStateCallback,
+    TokenHoverCallback,
+    TokenMoveEndCallback,
 } from './TokenSprite';
 import { TokenSprite } from './TokenSprite';
 
@@ -21,25 +22,45 @@ interface DrawStrokeState {
   shapeType: DrawShapeType;
 }
 
+interface MeasureVisual {
+  container: Container;
+  graphics: Graphics;
+  label: Text;
+}
+
+const MEASURE_DOT_RADIUS = 5;
+const MEASURE_LABEL_FONT_SIZE = 20;
+const MEASURE_LABEL_PADDING_X = 10;
+const MEASURE_LABEL_PADDING_Y = 5;
+const MEASURE_LABEL_CORNER_RADIUS = 6;
+const MEASURE_LABEL_BORDER_WIDTH = 2;
+const MEASURE_LABEL_BG_COLOR = 0x111111;
+const MEASURE_LABEL_BG_ALPHA = 0.9;
+
 export class PlaygroundLayer extends Container {
   private readonly gridGraphics: Graphics;
   readonly tokenContainer: Container;
   private readonly tilePlacementsContainer: Container;
+  private readonly tileClipMask: Graphics;
   private readonly tileSpriteMap = new Map<string, TilePlacementSprite>();
 
   /** Map of tokenId → TokenSprite for fast lookup */
   private readonly tokenSprites = new Map<string, TokenSprite>();
   private activeTokenId: string | null = null;
 
-  /** Drawing container — above tile placements, below tokens. Map key: `${userId}:${strokeId}` */
+  /** Draw + measure overlay; CanvasManager mounts it above fog/doors so annotations are never obscured. */
+  readonly overlayContainer: Container;
+
+  /** Map key: `${userId}:${strokeId}` */
   private readonly drawContainer: Container;
+  private readonly tokenDragPreviewContainer: Container;
   private readonly drawStrokes = new Map<string, DrawStrokeState>();
 
-  /** Map of userId → Graphics for remote measure line overlays */
-  private readonly measureGraphics = new Map<string, Graphics>();
+  /** Map of userId → remote measure line overlays */
+  private readonly remoteMeasures = new Map<string, MeasureVisual>();
 
   /** Local measure line overlay (owned by this client) */
-  private readonly localMeasureGraphics: Graphics;
+  private readonly localMeasure: MeasureVisual;
 
   constructor() {
     super();
@@ -51,17 +72,25 @@ export class PlaygroundLayer extends Container {
     this.tilePlacementsContainer.sortableChildren = true;
     this.addChild(this.tilePlacementsContainer);
 
-    this.drawContainer = new Container();
-    this.drawContainer.eventMode = 'none';
-    this.addChild(this.drawContainer);
+    this.tileClipMask = new Graphics();
+    this.addChild(this.tileClipMask);
 
     this.tokenContainer = new Container();
     this.tokenContainer.sortableChildren = true;
     this.addChild(this.tokenContainer);
 
-    this.localMeasureGraphics = new Graphics();
-    this.localMeasureGraphics.eventMode = 'none';
-    this.addChild(this.localMeasureGraphics);
+    this.overlayContainer = new Container();
+    this.overlayContainer.eventMode = 'none';
+
+    this.drawContainer = new Container();
+    this.drawContainer.eventMode = 'none';
+    this.overlayContainer.addChild(this.drawContainer);
+
+    this.tokenDragPreviewContainer = new Container();
+    this.tokenDragPreviewContainer.eventMode = 'none';
+    this.overlayContainer.addChild(this.tokenDragPreviewContainer);
+
+    this.localMeasure = this.createMeasureVisual();
   }
 
   drawGrid(mapWidth: number, mapHeight: number, config: GridConfig): void {
@@ -138,6 +167,7 @@ export class PlaygroundLayer extends Container {
 
     this.tokenSprites.set(token.id, sprite);
     this.tokenContainer.addChild(sprite);
+    this.tokenDragPreviewContainer.addChild(sprite.dragPreview);
     sprite.setActiveTurn(this.activeTokenId === token.id);
   }
 
@@ -227,6 +257,11 @@ export class PlaygroundLayer extends Container {
   // ---------------------------------------------------------------------------
   // Tile placement management
   // ---------------------------------------------------------------------------
+
+  /** Hide tile art outside the map rectangle; null removes the clip. */
+  setTileClip(bounds: MapClipBounds | null): void {
+    applyMapClip(this.tilePlacementsContainer, this.tileClipMask, bounds);
+  }
 
   addTilePlacement(sprite: TilePlacementSprite): void {
     this.removeTilePlacement(sprite.placementId);
@@ -368,20 +403,13 @@ export class PlaygroundLayer extends Container {
     color: string,
     distanceLabel: string,
   ): void {
-    this.drawMeasureLineOnGraphics(
-      this.localMeasureGraphics,
-      startX,
-      startY,
-      endX,
-      endY,
-      color,
-      distanceLabel,
-    );
+    this.renderMeasure(this.localMeasure, startX, startY, endX, endY, color, distanceLabel);
   }
 
   /** Clear this client's local measurement line. */
   clearLocalMeasureLine(): void {
-    this.localMeasureGraphics.clear();
+    this.localMeasure.graphics.clear();
+    this.localMeasure.label.visible = false;
   }
 
   /** Draw or update a remote user's measurement line relay. */
@@ -394,34 +422,53 @@ export class PlaygroundLayer extends Container {
     color: string,
     distanceLabel: string,
   ): void {
-    let g = this.measureGraphics.get(userId);
-    if (!g) {
-      g = new Graphics();
-      g.eventMode = 'none';
-      this.addChild(g);
-      this.measureGraphics.set(userId, g);
+    let visual = this.remoteMeasures.get(userId);
+    if (!visual) {
+      visual = this.createMeasureVisual();
+      this.remoteMeasures.set(userId, visual);
     }
-    this.drawMeasureLineOnGraphics(g, startX, startY, endX, endY, color, distanceLabel);
+    this.renderMeasure(visual, startX, startY, endX, endY, color, distanceLabel);
   }
 
-  /** Clear and destroy a remote user's measurement Graphics. */
+  /** Clear and destroy a remote user's measurement overlay. */
   clearRemoteMeasureLine(userId: string): void {
-    const g = this.measureGraphics.get(userId);
-    if (!g) return;
-    this.removeChild(g);
-    g.destroy();
-    this.measureGraphics.delete(userId);
+    const visual = this.remoteMeasures.get(userId);
+    if (!visual) return;
+    this.overlayContainer.removeChild(visual.container);
+    visual.container.destroy({ children: true });
+    this.remoteMeasures.delete(userId);
   }
 
-  /** Clear and destroy all remote measurement Graphics. */
+  /** Clear and destroy all remote measurement overlays. */
   clearAllRemoteMeasureLines(): void {
-    for (const [userId] of this.measureGraphics) {
+    for (const [userId] of this.remoteMeasures) {
       this.clearRemoteMeasureLine(userId);
     }
   }
 
-  private drawMeasureLineOnGraphics(
-    g: Graphics,
+  private createMeasureVisual(): MeasureVisual {
+    const container = new Container();
+    container.eventMode = 'none';
+    const graphics = new Graphics();
+    const label = new Text({
+      text: '',
+      style: {
+        fontFamily: 'sans-serif',
+        fontSize: MEASURE_LABEL_FONT_SIZE,
+        fontWeight: 'bold',
+        fill: 0xffffff,
+      },
+    });
+    label.anchor.set(0.5);
+    label.visible = false;
+    container.addChild(graphics);
+    container.addChild(label);
+    this.overlayContainer.addChild(container);
+    return { container, graphics, label };
+  }
+
+  private renderMeasure(
+    visual: MeasureVisual,
     startX: number,
     startY: number,
     endX: number,
@@ -429,40 +476,36 @@ export class PlaygroundLayer extends Container {
     color: string,
     distanceLabel: string,
   ): void {
+    const { graphics: g, label } = visual;
     g.clear();
 
     const colorNum = parseInt(color.replace('#', ''), 16);
 
-    // Draw the line
     g.moveTo(startX, startY);
     g.lineTo(endX, endY);
     g.stroke({ width: MEASURE_LINE_WIDTH, color: colorNum, alpha: MEASURE_LINE_ALPHA });
 
-    // Draw endpoint circles
-    const DOT_RADIUS = 4;
-    g.circle(startX, startY, DOT_RADIUS);
-    g.circle(endX, endY, DOT_RADIUS);
+    g.circle(startX, startY, MEASURE_DOT_RADIUS);
+    g.circle(endX, endY, MEASURE_DOT_RADIUS);
     g.fill({ color: colorNum, alpha: MEASURE_LINE_ALPHA });
 
-    // Draw label background at midpoint
     const midX = (startX + endX) / 2;
     const midY = (startY + endY) / 2;
-    const LABEL_PADDING = 4;
-    const LABEL_HEIGHT = 18;
-    const charWidth = 7;
-    const labelWidth = distanceLabel.length * charWidth + LABEL_PADDING * 2;
 
-    g.roundRect(midX - labelWidth / 2, midY - LABEL_HEIGHT / 2, labelWidth, LABEL_HEIGHT, 4);
-    g.fill({ color: 0x000000, alpha: 0.65 });
+    label.text = distanceLabel;
+    label.position.set(midX, midY);
+    label.visible = true;
 
-    // Store label metadata for external Text rendering if needed
-    const labelled = g as Graphics & {
-      measureLabel?: string;
-      measureLabelX?: number;
-      measureLabelY?: number;
-    };
-    labelled.measureLabel = distanceLabel;
-    labelled.measureLabelX = midX;
-    labelled.measureLabelY = midY;
+    const bgWidth = label.width + MEASURE_LABEL_PADDING_X * 2;
+    const bgHeight = label.height + MEASURE_LABEL_PADDING_Y * 2;
+    g.roundRect(
+      midX - bgWidth / 2,
+      midY - bgHeight / 2,
+      bgWidth,
+      bgHeight,
+      MEASURE_LABEL_CORNER_RADIUS,
+    );
+    g.fill({ color: MEASURE_LABEL_BG_COLOR, alpha: MEASURE_LABEL_BG_ALPHA });
+    g.stroke({ width: MEASURE_LABEL_BORDER_WIDTH, color: colorNum, alpha: 1 });
   }
 }

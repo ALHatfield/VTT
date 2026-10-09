@@ -36,3 +36,14 @@ Keep this file as the entry point for the advanced PixiJS canvas track:
 - high-level integration guidance across PM2-PM6
 
 Do not turn this file back into a mixed code dump. Detailed algorithms, examples, and performance notes belong in the focused files.
+
+## Vision Pipeline Rules (learned in PM3)
+
+Any new reveal source (tokens, lights, future spell effects) must follow these, or it reintroduces bugs PM3 review caught:
+
+- **Schedule, never emit directly.** Trigger recomputes via `scheduleVisionSync` / `flushVisionSync` (`vision.scheduler.ts`). Calling `emitVisionSync` directly lets two recomputes overlap and an older snapshot overwrite a newer one.
+- **Decide exploration explicitly.** Persistent exploration stores circles; an obstructed emitter must be clamped (see `inscribedRadius`) or excluded, otherwise the explored shroud leaks rooms behind walls.
+- **Never fail open.** `vision:updated` is emitted before `token:vision:sync`; the client buffers polygons and commits them in the same React batch as reveals. Keep reveal/polygon/door state keyed by `sceneId` rather than clearing on scene change.
+- **Role-gate on the server.** Mark party visibility (`partyVisible`) server-side; players must never receive geometry they cannot see.
+- **Mask space vs world space.** `FogMaskService` draws in mask space (world × `maskResolutionScale`); derive test expectations from the config, not world coordinates.
+- **Polygon hygiene.** ±ε rays round onto the same vertex — dedupe consecutive points *before* collinear simplification, or corners disappear. Check test points numerically against the wall before asserting visibility.

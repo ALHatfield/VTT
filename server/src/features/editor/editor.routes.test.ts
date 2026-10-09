@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { app } from '../../app.js';
 import { prisma } from '../../shared/db/prisma.js';
+import { loginAs } from '../../shared/test-utils/login.js';
 import { hashPassword } from '../../shared/utils/password.js';
 
 // Stub jimp so we don't need real image processing in tests
@@ -39,11 +40,6 @@ async function createUser(overrides?: { username?: string; email?: string }): Pr
     },
   });
   return { id: user.id, email: user.email, password };
-}
-
-async function loginAs(email: string, password: string): Promise<string[]> {
-  const res = await request(app).post('/api/auth/login').send({ email, password });
-  return res.headers['set-cookie'] as unknown as string[];
 }
 
 const TEST_USERNAMES = ['Editor_DM', 'Editor_Player'];

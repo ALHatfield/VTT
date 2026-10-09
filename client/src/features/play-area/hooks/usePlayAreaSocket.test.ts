@@ -2,10 +2,13 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  AURA_EVENTS,
-  INITIATIVE_EVENTS,
-  PLAY_AREA_EVENTS,
-  SOCKET_TOKEN_MOVE_DEBOUNCE_MS,
+    AURA_EVENTS,
+    EDITOR_EVENTS,
+    INITIATIVE_EVENTS,
+    LIGHT_EVENTS,
+    PLAY_AREA_EVENTS,
+    SOCKET_TOKEN_MOVE_DEBOUNCE_MS,
+    VISION_EVENTS,
 } from '@vtt/shared';
 
 // ---------------------------------------------------------------------------
@@ -235,6 +238,94 @@ describe('usePlayAreaSocket', () => {
       triggerSocketEvent(INITIATIVE_EVENTS.INITIATIVE_UPDATED, payload);
 
       expect(onInitiativeUpdated).toHaveBeenCalledWith(payload);
+    });
+
+    it('calls onWallsUpdated when editor wall geometry changes', () => {
+      const onWallsUpdated = vi.fn();
+      renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1', onWallsUpdated }));
+      const payload = { campaignId: 'campaign-1', sceneId: 'scene-1' };
+
+      triggerSocketEvent(EDITOR_EVENTS.WALLS_UPDATED, payload);
+
+      expect(onWallsUpdated).toHaveBeenCalledWith(payload);
+    });
+
+    it('calls onLightsUpdated when authored lights change', () => {
+      const onLightsUpdated = vi.fn();
+      renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1', onLightsUpdated }));
+      const payload = { campaignId: 'campaign-1', sceneId: 'scene-1' };
+
+      triggerSocketEvent(EDITOR_EVENTS.LIGHTS_UPDATED, payload);
+
+      expect(onLightsUpdated).toHaveBeenCalledWith(payload);
+    });
+
+    it('calls onTemporaryLightsUpdated with the scene snapshot', () => {
+      const onTemporaryLightsUpdated = vi.fn();
+      renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1', onTemporaryLightsUpdated }));
+      const payload = { campaignId: 'campaign-1', sceneId: 'scene-1', lights: [] };
+
+      triggerSocketEvent(LIGHT_EVENTS.LIGHT_UPDATED, payload);
+
+      expect(onTemporaryLightsUpdated).toHaveBeenCalledWith(payload);
+    });
+  });
+
+  describe('temporary light emits', () => {
+    const target = { campaignId: 'campaign-1', sceneId: 'scene-1' };
+
+    it('emits light:create, light:update, and light:delete payloads unchanged', () => {
+      const { result } = renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1' }));
+      const create = { ...target, emitterType: 'torch' as const, x: 1, y: 2 };
+      const update = { ...target, lightId: 'l1', changes: { intensity: 0.4 } };
+      const remove = { ...target, lightId: 'l1' };
+
+      act(() => {
+        result.current.emitLightCreate(create);
+        result.current.emitLightUpdate(update);
+        result.current.emitLightDelete(remove);
+      });
+
+      expect(mockSocketEmit).toHaveBeenCalledWith(LIGHT_EVENTS.LIGHT_CREATE, create);
+      expect(mockSocketEmit).toHaveBeenCalledWith(LIGHT_EVENTS.LIGHT_UPDATE, update);
+      expect(mockSocketEmit).toHaveBeenCalledWith(LIGHT_EVENTS.LIGHT_DELETE, remove);
+    });
+  });
+
+  describe('line of sight (PM3)', () => {
+    it('routes vision:updated and door:toggled to their callbacks', () => {
+      const onVisionUpdated = vi.fn();
+      const onDoorToggled = vi.fn();
+      renderHook(() =>
+        usePlayAreaSocket({ campaignId: 'campaign-1', onVisionUpdated, onDoorToggled }),
+      );
+      const vision = { campaignId: 'campaign-1', sceneId: 'scene-1', polygons: [], doors: [] };
+      const door = { campaignId: 'campaign-1', sceneId: 'scene-1', wallId: 'w1', isOpen: true };
+
+      triggerSocketEvent(VISION_EVENTS.VISION_UPDATED, vision);
+      triggerSocketEvent(VISION_EVENTS.DOOR_TOGGLED, door);
+
+      expect(onVisionUpdated).toHaveBeenCalledWith(vision);
+      expect(onDoorToggled).toHaveBeenCalledWith(door);
+    });
+
+    it('emits vision:refresh and door:toggle scoped to the campaign', () => {
+      const { result } = renderHook(() => usePlayAreaSocket({ campaignId: 'campaign-1' }));
+
+      act(() => {
+        result.current.emitVisionRefresh('scene-1');
+        result.current.emitDoorToggle('scene-1', 'wall-1');
+      });
+
+      expect(mockSocketEmit).toHaveBeenCalledWith(VISION_EVENTS.VISION_REFRESH, {
+        campaignId: 'campaign-1',
+        sceneId: 'scene-1',
+      });
+      expect(mockSocketEmit).toHaveBeenCalledWith(VISION_EVENTS.DOOR_TOGGLE, {
+        campaignId: 'campaign-1',
+        sceneId: 'scene-1',
+        wallId: 'wall-1',
+      });
     });
   });
 

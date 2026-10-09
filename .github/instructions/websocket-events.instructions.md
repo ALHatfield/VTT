@@ -1,6 +1,6 @@
 ---
 description: "Conventions for Socket.IO event handling, naming, and real-time communication patterns."
-applyTo: "**/socket/**,**/features/play-area/**"
+applyTo: "**/socket/**,**/features/play-area/**,**/features/dice/**"
 ---
 # WebSocket Conventions (Socket.IO)
 

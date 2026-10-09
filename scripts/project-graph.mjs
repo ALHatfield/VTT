@@ -23,6 +23,10 @@ const SLUG_MAP = {
   PA: 'play-area',
   E: 'editor',
   CH: 'characters',
+  ST: 'story',
+  BE: 'bestiary',
+  DI: 'dice',
+  INV: 'inventory',
 };
 
 function hasFlag(flag) {
@@ -78,11 +82,11 @@ function parseMermaidGraph(content) {
       const toId = edgeMatch[3];
       const toLabel = edgeMatch[4] || null;
 
-      if (fromLabel && !nodes.has(fromId)) {
+      if (fromLabel) {
         nodes.set(fromId, fromLabel);
       }
 
-      if (toLabel && !nodes.has(toId)) {
+      if (toLabel) {
         nodes.set(toId, toLabel);
       }
 
@@ -130,7 +134,9 @@ function parsePhaseFromLabel(label) {
  * Resolve the slug from a Mermaid node ID prefix.
  */
 function resolveSlugFromNodeId(nodeId) {
-  for (const [prefix, slug] of Object.entries(SLUG_MAP)) {
+  // Longest prefix first so "CH" wins over "C"
+  const entries = Object.entries(SLUG_MAP).sort(([a], [b]) => b.length - a.length);
+  for (const [prefix, slug] of entries) {
     if (nodeId.startsWith(prefix) && slug !== null) {
       return slug;
     }
@@ -365,7 +371,7 @@ async function loadAllPhaseStatuses(roadmapRows) {
       const baseName = entry.name.replace('.md', '');
 
       // Match slug-phaseId pattern (e.g., "play-area-4A", "auth-1A", "campaigns-3B")
-      const match = baseName.match(/^(.+)-(\d+[A-Z](?:\.\d+)?)$/);
+      const match = baseName.match(/^(.+)-(\d+[A-Z](?:\.\d+)?|PM\d+)$/);
       if (match) {
         phaseStatusMap.set(match[2], 'Complete');
       }
@@ -491,6 +497,11 @@ function parseRoadmapStatusTable(content) {
 function nodeIdToPhaseId(nodeId) {
   if (nodeId === 'P0') {
     return 'P0';
+  }
+
+  const postMvpMatch = nodeId.match(/(PM\d+)$/);
+  if (postMvpMatch) {
+    return postMvpMatch[1];
   }
 
   // Match full sub-phase pattern: digits + letter + digit(s) at end (e.g. 4F1 → 4F.1)
@@ -625,11 +636,17 @@ async function main() {
   const unblocked = [];
   const blocked = [];
   const inProgressPhases = [];
+  const deferredPhases = [];
 
   for (const [nodeId, label] of nodes) {
     const status = nodeStatusMap.get(nodeId);
 
     if (status === 'Complete') {
+      continue;
+    }
+
+    if (status === 'Deferred') {
+      deferredPhases.push({ nodeId, label });
       continue;
     }
 
@@ -660,6 +677,80 @@ async function main() {
 
   // Critical path
   const criticalPath = findCriticalPath(edges, nodes, nodeStatusMap);
+
+  // Recommendation: in-progress first, then the unblocked phase that
+  // unlocks the most incomplete downstream work; tie-break by feature order
+  const FEATURE_ORDER = [
+    'auth',
+    'campaigns',
+    'play-area',
+    'editor',
+    'characters',
+    'portal',
+    'story',
+    'bestiary',
+    'dice',
+    'inventory',
+  ];
+
+  const outgoing = new Map();
+  for (const nodeId of nodes.keys()) {
+    outgoing.set(nodeId, []);
+  }
+  for (const { from, to } of edges) {
+    if (outgoing.has(from)) {
+      outgoing.get(from).push(to);
+    }
+  }
+
+  function countDownstreamWork(startId) {
+    const seen = new Set();
+    const queue = [...(outgoing.get(startId) || [])];
+    let count = 0;
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (seen.has(current)) {
+        continue;
+      }
+      seen.add(current);
+      const status = nodeStatusMap.get(current);
+      if (status !== 'Complete' && status !== 'Deferred') {
+        count += 1;
+      }
+      queue.push(...(outgoing.get(current) || []));
+    }
+    return count;
+  }
+
+  function featureOrderIndex(nodeId) {
+    const slug = resolveSlugFromNodeId(nodeId);
+    const index = FEATURE_ORDER.indexOf(slug);
+    return index === -1 ? FEATURE_ORDER.length : index;
+  }
+
+  let recommendation = null;
+  if (inProgressPhases.length > 0) {
+    recommendation = {
+      ...inProgressPhases[0],
+      reason: 'in progress — finish what is started',
+    };
+  } else if (unblocked.length > 0) {
+    const ranked = unblocked
+      .map((phase) => ({
+        ...phase,
+        unlocks: countDownstreamWork(phase.nodeId),
+      }))
+      .sort(
+        (a, b) =>
+          b.unlocks - a.unlocks ||
+          featureOrderIndex(a.nodeId) - featureOrderIndex(b.nodeId) ||
+          a.nodeId.localeCompare(b.nodeId)
+      );
+    recommendation = {
+      ...ranked[0],
+      reason: `unlocks ${ranked[0].unlocks} downstream phase(s)`,
+    };
+  }
 
   // Parallelizable: unblocked phases with no mutual dependency
   // --concise: cross-feature pairs only (default: all pairs)
@@ -735,6 +826,13 @@ async function main() {
     }
   }
 
+  if (deferredPhases.length > 0) {
+    const deferredList = deferredPhases
+      .map(({ nodeId, label }) => `${nodeId} [${label}]`)
+      .join(', ');
+    console.log(`\nDEFERRED (intentionally sidelined): ${deferredList}`);
+  }
+
   console.log('\nCRITICAL PATH (longest remaining chain):');
   if (criticalPath.length === 0) {
     console.log('  (all phases complete)');
@@ -751,6 +849,15 @@ async function main() {
     for (const [a, b] of parallelizable) {
       console.log(`  ${a.nodeId} [${a.label}] ∥ ${b.nodeId} [${b.label}]`);
     }
+  }
+
+  console.log('\nRECOMMENDED NEXT:');
+  if (recommendation) {
+    console.log(
+      `  \u{1F449} ${recommendation.nodeId}: ${recommendation.label} \u2014 ${recommendation.reason}`
+    );
+  } else {
+    console.log('  (nothing available \u2014 all phases complete, deferred, or blocked)');
   }
 }
 

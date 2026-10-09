@@ -1,4 +1,4 @@
-import type { Campaign, CampaignPlayer, CampaignRole } from '@vtt/shared';
+import type { Campaign, CampaignPlayer, CampaignRole, GameSystem } from '@vtt/shared';
 import { PLAYER_COLOR_PALETTE } from '@vtt/shared';
 import { prisma } from '../../shared/db/prisma.js';
 
@@ -10,6 +10,7 @@ function toCampaign(
     id: string;
     name: string;
     description: string | null;
+    gameSystem: string;
     createdAt: Date;
     updatedAt: Date;
   },
@@ -19,6 +20,7 @@ function toCampaign(
     id: raw.id,
     name: raw.name,
     description: raw.description,
+    gameSystem: raw.gameSystem as GameSystem,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     role,
@@ -100,12 +102,14 @@ export async function getCampaignWithMembers(
 export async function createCampaign(
   userId: string,
   name: string,
-  description?: string,
+  description: string | undefined,
+  gameSystem: GameSystem,
 ): Promise<Campaign> {
   const campaign = await prisma.campaign.create({
     data: {
       name,
       description: description ?? null,
+      gameSystem,
       members: {
         create: {
           userId,

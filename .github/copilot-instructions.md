@@ -37,7 +37,7 @@ npm run dev              # Start client + server in dev mode
 npm run dev:client       # Start Vite dev server only
 npm run dev:server       # Start Express server with ts-node/nodemon
 npm run build            # Build all packages
-npm run test             # Run Vitest across all packages
+npm run test             # Run Vitest across all packages (watch mode — use `npx vitest run` for a one-shot run)
 npm run db:migrate       # Run Prisma migrations
 npm run db:seed          # Seed pre-configured user accounts
 npm run db:studio        # Open Prisma Studio
@@ -73,3 +73,7 @@ Each feature has a **slug** used consistently across the entire project:
 | `play-area` | `features/play-area/` | `feature-play-area.instructions.md` | `features/play-area.md` | `types/play-area.ts` |
 | `editor` | `features/editor/` | `feature-editor.instructions.md` | `features/editor.md` | `types/editor.ts` |
 | `characters` | `features/characters/` | `feature-characters.instructions.md` | `features/characters.md` | `types/characters.ts` |
+| `story` | `features/story/` | `feature-story.instructions.md` | `features/story.md` | `types/story.ts` |
+| `bestiary` | `features/bestiary/` | `feature-bestiary.instructions.md` | `features/bestiary.md` | `types/bestiary.ts` |
+| `dice` | `features/dice/` | `feature-dice.instructions.md` | `features/dice.md` | `types/dice.ts` |
+| `inventory` | `features/inventory/` | `feature-inventory.instructions.md` | `features/inventory.md` | `types/inventory.ts` |

@@ -1,12 +1,14 @@
-import { Assets, Container, Sprite } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite } from 'pixi.js';
 
 import type { MapData } from '@vtt/shared';
 
 import type { TilePlacementSprite } from './TilePlacementSprite';
+import { applyMapClip, type MapClipBounds } from './map-clip';
 
 export class BackgroundLayer extends Container {
   private mapSprite: Sprite | null = null;
   private readonly tilePlacementsContainer: Container;
+  private readonly tileClipMask: Graphics;
   private readonly tileSpriteMap = new Map<string, TilePlacementSprite>();
 
   constructor() {
@@ -14,6 +16,14 @@ export class BackgroundLayer extends Container {
     this.tilePlacementsContainer = new Container();
     this.tilePlacementsContainer.sortableChildren = true;
     this.addChild(this.tilePlacementsContainer);
+
+    this.tileClipMask = new Graphics();
+    this.addChild(this.tileClipMask);
+  }
+
+  /** Hide tile art outside the map rectangle; null removes the clip. */
+  setTileClip(bounds: MapClipBounds | null): void {
+    applyMapClip(this.tilePlacementsContainer, this.tileClipMask, bounds);
   }
 
   async loadMap(mapData: MapData): Promise<void> {

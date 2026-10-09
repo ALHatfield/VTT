@@ -1,5 +1,5 @@
 ---
-description: "Character sheets feature — stats, inventory, interactive rolling, and token integration."
+description: "Character sheets feature — stats, spells, interactive rolling, and token integration."
 applyTo: "**/features/characters/**"
 ---
 # Feature: characters
@@ -7,12 +7,12 @@ applyTo: "**/features/characters/**"
 > For current phase status and tasks, see `.project/features/characters.md`
 
 ## Overview
-Character sheets are interactive digital interfaces for managing TTRPG characters. They store stats, inventory, spells, and features, and integrate with the dice roller and token system.
+Character sheets are interactive digital interfaces for managing TTRPG characters. They store stats, spells, and features, and integrate with the dice roller and token system. Item management lives in the `inventory` feature — the sheet embeds its panel.
 
 ## Core Features
 - **Stats & Modifiers**: Ability scores (STR, DEX, CON, INT, WIS, CHA) with auto-calculated modifiers
 - **Skills**: Proficiency tracking with modifier auto-calculation
-- **Inventory**: Items with weight, quantity, and properties — auto-calculated encumbrance
+- **Inventory**: rendered by embedding the inventory feature's `InventoryPanel` (inventory 10B) — items, encumbrance, and transfers are owned by that feature
 - **Spells**: Spell list with slot tracking, prepared spells, and level-based filtering
 - **Features & Abilities**: Class features, racial traits, and feat descriptions
 - **Biography**: Character name, race, class, level, appearance, backstory tabs
@@ -34,7 +34,7 @@ Character sheets are interactive digital interfaces for managing TTRPG character
 ## Data Model
 - Characters belong to a user and are scoped to a campaign
 - Core fields: name, race, class, level, ability scores, HP (current/max), AC
-- Extended data stored as JSON columns: inventory, spells, features
+- Extended data stored as JSON columns: spells, features (inventory is normalized in the inventory feature)
 - Character portrait URL for token display
 
 ## API Endpoints

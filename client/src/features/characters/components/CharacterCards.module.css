@@ -1,0 +1,87 @@
+.header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.createButton {
+  padding: 0.5rem 1rem;
+  background: var(--accent, #4a9eff);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.createButton:hover {
+  opacity: 0.9;
+}
+
+.templateBadge {
+  margin-left: 0.5rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--accent, #4a9eff);
+  border: 1px solid var(--accent, #4a9eff);
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--surface, #2a2a2a);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 8px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.card:hover {
+  border-color: var(--accent, #4a9eff);
+}
+
+.cardName {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+  margin-bottom: 0.25rem;
+}
+
+.cardMeta {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #a0a0a0);
+  margin-bottom: 0.5rem;
+}
+
+.cardStats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+.statBadge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.statLabel {
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.emptyState {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-secondary, #a0a0a0);
+}

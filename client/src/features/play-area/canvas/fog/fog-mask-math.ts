@@ -1,16 +1,17 @@
 import type {
-  FogMaskConfig,
-  FogVertex,
-  FogVisibilityState,
-  TokenVisionReveal,
-  VisionStamp,
+    FogMaskConfig,
+    FogVertex,
+    FogVisibilityState,
+    TokenVisionReveal,
+    VisibilityPolygon,
+    VisionStamp,
 } from '@vtt/shared';
 import {
-  FOG_MASK_MAX_TEXTURE_DIMENSION,
-  FOG_MASK_RESOLUTION_MAX,
-  FOG_MASK_RESOLUTION_MIN,
-  FOG_MASK_SOFT_EDGE_STEPS,
-  FOG_MASK_STAMPS_PER_BATCH,
+    FOG_MASK_MAX_TEXTURE_DIMENSION,
+    FOG_MASK_RESOLUTION_MAX,
+    FOG_MASK_RESOLUTION_MIN,
+    FOG_MASK_SOFT_EDGE_STEPS,
+    FOG_MASK_STAMPS_PER_BATCH,
 } from '@vtt/shared';
 
 export interface MaskDimensions {
@@ -83,6 +84,59 @@ export function visionRevealsToStamps(
   }
 
   return stamps;
+}
+
+/**
+ * Wall-ignoring peripheral circles, one per sighted reveal. Blind emitters
+ * (visionRadius 0) get no peripheral sense either.
+ */
+export function buildPeripheralStamps(
+  reveals: TokenVisionReveal[],
+  radiusCells: number,
+  cellSize: number,
+): VisionStamp[] {
+  if (radiusCells <= 0) return [];
+  return visionRevealsToStamps(
+    reveals
+      .filter((reveal) => reveal.visionRadius > 0)
+      .map((reveal) => ({ ...reveal, visionRadius: radiusCells })),
+    cellSize,
+  );
+}
+
+export interface ActiveVision {
+  /** Circular reveals for emitters with no nearby obstacles. */
+  stamps: VisionStamp[];
+  /** Line-of-sight polygons (PM3) that replace the circle for obstructed emitters. */
+  polygons: FogVertex[][];
+}
+
+/**
+ * Split current reveals into LOS polygons and plain circles. Token polygons are
+ * only used for emitters still in the reveal set, so a removed token never leaves
+ * a stale polygon behind. Light polygons are lit areas and always apply.
+ */
+export function resolveActiveVision(
+  reveals: TokenVisionReveal[],
+  polygons: readonly VisibilityPolygon[],
+  cellSize: number,
+): ActiveVision {
+  const polygonsByEmitter = new Map<string, FogVertex[]>();
+  const activePolygons: FogVertex[][] = [];
+  for (const polygon of polygons) {
+    if (polygon.points.length < 3) continue;
+    if (polygon.source === 'light') activePolygons.push(polygon.points);
+    else polygonsByEmitter.set(polygon.emitterId, polygon.points);
+  }
+
+  const circleReveals: TokenVisionReveal[] = [];
+  for (const reveal of reveals) {
+    const points = polygonsByEmitter.get(reveal.tokenId);
+    if (points && reveal.visionRadius > 0) activePolygons.push(points);
+    else circleReveals.push(reveal);
+  }
+
+  return { stamps: visionRevealsToStamps(circleReveals, cellSize), polygons: activePolygons };
 }
 
 /**

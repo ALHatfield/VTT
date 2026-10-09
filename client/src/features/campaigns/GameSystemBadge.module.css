@@ -1,0 +1,21 @@
+.badge {
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dnd5e {
+  background-color: rgba(230, 57, 70, 0.15);
+  color: #f07178;
+  border: 1px solid rgba(230, 57, 70, 0.35);
+}
+
+.pf2e {
+  background-color: rgba(255, 159, 28, 0.15);
+  color: #ffb454;
+  border: 1px solid rgba(255, 159, 28, 0.35);
+}

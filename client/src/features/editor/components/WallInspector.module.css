@@ -1,0 +1,86 @@
+/* WallInspector — Phase 5F */
+
+.inspector {
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.empty {
+  text-align: center;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.72rem;
+  padding: 8px 0;
+  margin: 0;
+}
+
+.heading {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #e8e8e8);
+  margin: 0;
+}
+
+.endpoints {
+  font-size: 0.68rem;
+  color: var(--color-text-muted, #8b8b9e);
+  margin: 0 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--color-text-primary, #e8e8e8);
+  cursor: pointer;
+}
+
+.doorState {
+  display: flex;
+  gap: 4px;
+}
+
+.stateBtn {
+  flex: 1;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.68rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.stateBtnActive {
+  background: rgba(255, 179, 0, 0.15);
+  border-color: #ffb300;
+  color: #ffb300;
+}
+
+.deleteBtn {
+  margin-top: 4px;
+  padding: 5px 10px;
+  background: rgba(220, 53, 69, 0.15);
+  border: 1px solid rgba(220, 53, 69, 0.35);
+  border-radius: 4px;
+  color: #ff6b6b;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.deleteBtn:hover {
+  background: rgba(220, 53, 69, 0.28);
+}
+
+.stateBtn:focus-visible,
+.deleteBtn:focus-visible {
+  outline: 2px solid #4a9eff;
+  outline-offset: 1px;
+}

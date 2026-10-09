@@ -79,6 +79,13 @@
   gap: var(--spacing-sm);
 }
 
+.cardBadges {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
 .cardTitle {
   font-size: var(--font-size-lg);
   font-weight: 600;

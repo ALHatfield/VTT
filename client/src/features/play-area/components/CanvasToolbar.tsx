@@ -1,11 +1,11 @@
 import type { DragEvent, ReactElement } from 'react';
 
-import type { CampaignRole, FogMaskConfig, NpcSubtype } from '@vtt/shared';
+import type { CampaignRole, FogMaskConfig, NpcSubtype, TemporaryLight } from '@vtt/shared';
 import {
-  DRAW_DEFAULT_COLOR,
-  DRAW_DEFAULT_WIDTH,
-  DRAW_WIDTH_MAX,
-  DRAW_WIDTH_MIN,
+    DRAW_DEFAULT_COLOR,
+    DRAW_DEFAULT_WIDTH,
+    DRAW_WIDTH_MAX,
+    DRAW_WIDTH_MIN,
 } from '@vtt/shared';
 
 import { NPC_DRAG_MIME } from '../hooks/useNpcDrop';
@@ -14,6 +14,7 @@ import type { FogViewMode } from '../hooks/useFogViewMode';
 import type { ToolMode } from '../hooks/useToolMode';
 import styles from './CanvasToolbar.module.css';
 import { FogSettingsPanel } from './FogSettingsPanel';
+import { TemporaryLightsPanel } from './TemporaryLightsPanel';
 
 interface ToolDef {
   id: ToolMode;
@@ -23,7 +24,12 @@ interface ToolDef {
 }
 
 const TOOLS: ToolDef[] = [
-  { id: 'select', label: 'Select', icon: '◈', title: 'Select tool — click and drag tokens' },
+  {
+    id: 'select',
+    label: 'Select',
+    icon: '◈',
+    title: 'Select tool — drag tokens, drag empty space to pan, Shift+drag to box-select',
+  },
   { id: 'pan', label: 'Pan', icon: '✥', title: 'Pan tool — left-click drag to pan the map' },
   {
     id: 'measure',
@@ -33,7 +39,7 @@ const TOOLS: ToolDef[] = [
   },
 ];
 
-// DM-only panel tools ('npc-place', 'fog-reveal', 'fog-hide') are gated inline
+// DM-only panel tools ('npc-place', 'light-place', 'fog-reveal', 'fog-hide') are gated inline
 // with role checks and are not enumerated here.
 function visibleTools(role: CampaignRole | null): ToolMode[] {
   if (role === 'observer') return ['pan'];
@@ -66,6 +72,10 @@ interface CanvasToolbarProps {
   drawStrokeWidth?: number;
   onDrawStrokeWidthChange?: (width: number) => void;
   onDrawClear?: () => void;
+  /** Session-scoped DM lights (Phase PM4). DM-only. */
+  temporaryLights?: TemporaryLight[];
+  onTemporaryLightIntensityChange?: (lightId: string, intensity: number) => void;
+  onTemporaryLightDelete?: (lightId: string) => void;
 }
 
 export function CanvasToolbar({
@@ -86,6 +96,9 @@ export function CanvasToolbar({
   drawStrokeWidth = DRAW_DEFAULT_WIDTH,
   onDrawStrokeWidthChange,
   onDrawClear,
+  temporaryLights = [],
+  onTemporaryLightIntensityChange = NOOP,
+  onTemporaryLightDelete = NOOP,
 }: CanvasToolbarProps): ReactElement {
   const allowed = visibleTools(role);
   const isFogActive = activeTool === 'fog-reveal' || activeTool === 'fog-hide';
@@ -237,6 +250,30 @@ export function CanvasToolbar({
             )}
           </div>
         </>
+      )}
+      {/* Temporary encounter lights — DM only (Phase PM4) */}
+      {role === 'dm' && (
+        <div className={styles.toolGroup}>
+          <button
+            type="button"
+            className={`${styles.toolBtn} ${activeTool === 'light-place' ? styles.active : ''}`}
+            title="Lights — drag temporary encounter lights onto the map (DM only)"
+            aria-pressed={activeTool === 'light-place'}
+            onClick={() => onToolChange(activeTool === 'light-place' ? 'select' : 'light-place')}
+          >
+            <span className={styles.icon}>🕯</span>
+            <span className={styles.label}>Lights</span>
+          </button>
+          {activeTool === 'light-place' && (
+            <div className={styles.toolPanel}>
+              <TemporaryLightsPanel
+                lights={temporaryLights}
+                onIntensityChange={onTemporaryLightIntensityChange}
+                onDelete={onTemporaryLightDelete}
+              />
+            </div>
+          )}
+        </div>
       )}
       {/* Fog of War tool — DM only */}
       {role === 'dm' && (

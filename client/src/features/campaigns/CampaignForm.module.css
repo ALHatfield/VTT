@@ -45,7 +45,8 @@
 }
 
 .input,
-.textarea {
+.textarea,
+.select {
   background-color: var(--color-bg-secondary);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-sm);
@@ -59,15 +60,32 @@
 }
 
 .input:focus,
-.textarea:focus {
+.textarea:focus,
+.select:focus {
   border-color: var(--color-accent);
   outline: none;
 }
 
 .input:disabled,
-.textarea:disabled {
+.textarea:disabled,
+.select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.select {
+  cursor: pointer;
+}
+
+.systemLocked {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.systemLockedNote {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 .textarea {

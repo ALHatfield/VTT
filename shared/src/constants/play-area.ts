@@ -73,32 +73,6 @@ export const CHAT_EVENTS = {
 
 export type ChatEvent = (typeof CHAT_EVENTS)[keyof typeof CHAT_EVENTS];
 
-// Dice constants (Phase 4E)
-export const DICE_FORMULA_MAX_LENGTH = 100;
-export const DICE_MAX_COUNT = 100;
-export const DICE_MAX_SIDES = 1000;
-/** Server-side floor between rolls from the same user — one roll at a time. */
-export const DICE_ROLL_COOLDOWN_MS = 1000;
-
-export const DICE_EVENTS = {
-  // Client → Server
-  DICE_ROLL: 'play-area:dice:roll',
-} as const;
-
-export type DiceEvent = (typeof DICE_EVENTS)[keyof typeof DICE_EVENTS];
-
-// 3D dice animation constants (Phase PM1)
-/** Die side counts the 3D renderer supports; other sizes fall back to instant reveal. */
-export const DICE_3D_SUPPORTED_SIDES = [4, 6, 8, 10, 12, 20] as const;
-/** Max dice animated per roll — matches the renderer's release position spread. */
-export const DICE_3D_MAX_DICE = 8;
-/** Max rolls animating/lingering at once — matches the renderer's landing slots. */
-export const DICE_3D_MAX_CONCURRENT_ROLLS = 4;
-/** Safety timeout: if the 3D animation never completes, reveal the roll in chat anyway. */
-export const DICE_3D_REVEAL_TIMEOUT_MS = 8000;
-/** localStorage key for the per-user dice animation mode preference. */
-export const DICE_3D_STORAGE_KEY = 'vtt:dice-animation-mode';
-
 // Fog constants (Phase 4F)
 export const FOG_EVENTS = {
   // Client → Server
@@ -129,6 +103,19 @@ export const TOKEN_VISION_EVENTS = {
 
 export type TokenVisionEvent = (typeof TOKEN_VISION_EVENTS)[keyof typeof TOKEN_VISION_EVENTS];
 
+/**
+ * Unowned monsters and non-ally NPCs (null subtype defaults to enemy). Players only see
+ * these while a party token has line of sight to them.
+ */
+export function isEnemyToken(token: {
+  ownerId: string | null;
+  type: string;
+  npcSubtype: string | null;
+}): boolean {
+  if (token.ownerId !== null) return false;
+  return token.type === 'monster' || (token.type === 'npc' && token.npcSubtype !== 'ally');
+}
+
 // Fog mask pipeline constants (Phase PM2)
 export const FOG_CONFIG_EVENTS = {
   /** Server → Client: scene fog configuration changed. */
@@ -154,6 +141,11 @@ export const FOG_EXPLORATION_QUANTIZE_CELLS = 1;
 /** Upper bound on persisted exploration stamps returned for one scene. */
 export const FOG_EXPLORATION_MAX_STAMPS = 5000;
 
+/** Fog opacity beyond every peripheral radius. */
+export const PERIPHERAL_DARKNESS_ALPHA = 1;
+export const PERIPHERAL_VISION_RADIUS_MIN = 0;
+export const PERIPHERAL_VISION_RADIUS_MAX = 6;
+
 export const DEFAULT_FOG_MASK_CONFIG: FogMaskConfig = {
   fogMode: 'legacy',
   explorationMode: 'off',
@@ -162,6 +154,8 @@ export const DEFAULT_FOG_MASK_CONFIG: FogMaskConfig = {
   shroudAlpha: 0.55,
   hiddenAlpha: 0.78,
   edgeSoftnessRatio: 0.25,
+  peripheralVisionRadius: 0,
+  peripheralShroudAlpha: 0.8,
 };
 
 // Initiative constants (Phase 4H)
@@ -216,3 +210,36 @@ export type MeasureEvent = (typeof MEASURE_EVENTS)[keyof typeof MEASURE_EVENTS];
 export const MEASURE_LINE_WIDTH = 2;
 /** Alpha for the measurement line overlay. */
 export const MEASURE_LINE_ALPHA = 0.8;
+
+// Dynamic lighting constants (Phase PM4)
+export const LIGHT_EVENTS = {
+  /** Client → Server: DM places a temporary light. */
+  LIGHT_CREATE: 'play-area:light:create',
+  /** Client → Server: DM edits a temporary light. */
+  LIGHT_UPDATE: 'play-area:light:update',
+  /** Client → Server: DM removes a temporary light. */
+  LIGHT_DELETE: 'play-area:light:delete',
+  /** Server → Client: scene's temporary-light snapshot changed. */
+  LIGHT_UPDATED: 'play-area:light:updated',
+} as const;
+
+export type LightEvent = (typeof LIGHT_EVENTS)[keyof typeof LIGHT_EVENTS];
+
+export const MAX_TEMPORARY_LIGHTS_PER_SCENE = 50;
+
+// Line of sight constants (Phase PM3)
+export const VISION_EVENTS = {
+  /** Client → Server: wall geometry changed; recompute line of sight. */
+  VISION_REFRESH: 'play-area:vision:refresh',
+  /** Server → Client: role-gated visibility polygons + doors. */
+  VISION_UPDATED: 'play-area:vision:updated',
+  /** Client → Server: open/close a door. */
+  DOOR_TOGGLE: 'play-area:door:toggle',
+  /** Server → Client: a door changed state. */
+  DOOR_TOGGLED: 'play-area:door:toggled',
+} as const;
+
+export type VisionEvent = (typeof VISION_EVENTS)[keyof typeof VISION_EVENTS];
+
+/** Server-side floor between door toggles from the same socket. */
+export const DOOR_TOGGLE_COOLDOWN_MS = 250;

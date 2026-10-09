@@ -11,7 +11,7 @@
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1B | Dev Tooling | Not Started |
+| 1B | Dev Tooling | Deferred |
 
 ---
 

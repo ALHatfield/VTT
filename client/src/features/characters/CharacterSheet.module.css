@@ -135,70 +135,6 @@
   border-bottom-color: var(--accent, #4a9eff);
 }
 
-/* Ability scores grid */
-.abilityGrid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-
-.abilityCard {
-  background: var(--surface, #2a2a2a);
-  border: 1px solid var(--border, #3a3a3a);
-  border-radius: 8px;
-  padding: 0.75rem;
-  text-align: center;
-}
-
-.abilityName {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary, #a0a0a0);
-  margin-bottom: 0.25rem;
-}
-
-.abilityModifier {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-primary, #e0e0e0);
-}
-
-.abilityScore {
-  font-size: 0.75rem;
-  color: var(--text-secondary, #a0a0a0);
-}
-
-/* Computed stats */
-.computedStats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.computedStat {
-  background: var(--surface, #2a2a2a);
-  border: 1px solid var(--border, #3a3a3a);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.computedStatLabel {
-  font-size: 0.8rem;
-  color: var(--text-secondary, #a0a0a0);
-}
-
-.computedStatValue {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary, #e0e0e0);
-}
-
 /* Biography */
 .biographyContent {
   background: var(--surface, #2a2a2a);
@@ -253,10 +189,6 @@
 }
 
 @media (max-width: 640px) {
-  .abilityGrid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
   .coreStats {
     gap: 0.75rem;
   }

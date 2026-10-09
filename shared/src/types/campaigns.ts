@@ -9,12 +9,18 @@
 export type CampaignRole = 'dm' | 'player' | 'observer';
 
 /**
+ * Supported game systems — chosen at campaign creation and immutable
+ */
+export type GameSystem = 'dnd5e' | 'pf2e';
+
+/**
  * A campaign — the top-level workspace for a TTRPG session
  */
 export interface Campaign {
   id: string;
   name: string;
   description: string | null;
+  gameSystem: GameSystem;
   createdAt: Date;
   updatedAt: Date;
   /** The authenticated user's role in this campaign */
@@ -40,10 +46,13 @@ export interface CampaignPlayer {
 export interface CampaignCreatePayload {
   name: string;
   description?: string;
+  /** Defaults to 'dnd5e' when omitted */
+  gameSystem?: GameSystem;
 }
 
 /**
- * Payload for updating an existing campaign
+ * Payload for updating an existing campaign.
+ * `gameSystem` is intentionally absent — it is immutable after creation.
  */
 export interface CampaignUpdatePayload {
   name?: string;

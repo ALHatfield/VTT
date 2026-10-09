@@ -1,7 +1,12 @@
 import { useEffect, useState, type ReactElement } from 'react';
 
 import type { ExplorationMode, FogEdgeSoftness, FogMaskConfig, FogMode } from '@vtt/shared';
-import { FOG_MASK_RESOLUTION_MAX, FOG_MASK_RESOLUTION_MIN } from '@vtt/shared';
+import {
+    FOG_MASK_RESOLUTION_MAX,
+    FOG_MASK_RESOLUTION_MIN,
+    PERIPHERAL_VISION_RADIUS_MAX,
+    PERIPHERAL_VISION_RADIUS_MIN,
+} from '@vtt/shared';
 
 import styles from './FogSettingsPanel.module.css';
 
@@ -11,10 +16,20 @@ interface FogSettingsPanelProps {
   onResetExploration: () => void;
 }
 
-type SliderKey = 'maskResolutionScale' | 'shroudAlpha' | 'hiddenAlpha';
+type SliderKey =
+  | 'maskResolutionScale'
+  | 'shroudAlpha'
+  | 'hiddenAlpha'
+  | 'peripheralVisionRadius'
+  | 'peripheralShroudAlpha';
 
 const RESOLUTION_STEP = 0.05;
 const ALPHA_STEP = 0.05;
+const RADIUS_STEP = 0.1;
+
+const formatPercent = (value: number): string => `${Math.round(value * 100)}%`;
+const formatCells = (value: number): string =>
+  value > 0 ? `${value.toFixed(1)} cells` : 'Off';
 
 /**
  * DM-only controls for the PM2 fog mask pipeline (Phase PM2).
@@ -33,6 +48,8 @@ export function FogSettingsPanel({
     maskResolutionScale: config.maskResolutionScale,
     shroudAlpha: config.shroudAlpha,
     hiddenAlpha: config.hiddenAlpha,
+    peripheralVisionRadius: config.peripheralVisionRadius,
+    peripheralShroudAlpha: config.peripheralShroudAlpha,
   });
 
   useEffect(() => {
@@ -40,8 +57,16 @@ export function FogSettingsPanel({
       maskResolutionScale: config.maskResolutionScale,
       shroudAlpha: config.shroudAlpha,
       hiddenAlpha: config.hiddenAlpha,
+      peripheralVisionRadius: config.peripheralVisionRadius,
+      peripheralShroudAlpha: config.peripheralShroudAlpha,
     });
-  }, [config.maskResolutionScale, config.shroudAlpha, config.hiddenAlpha]);
+  }, [
+    config.maskResolutionScale,
+    config.shroudAlpha,
+    config.hiddenAlpha,
+    config.peripheralVisionRadius,
+    config.peripheralShroudAlpha,
+  ]);
 
   const renderSlider = (
     key: SliderKey,
@@ -49,6 +74,8 @@ export function FogSettingsPanel({
     step: number,
     min: number,
     max: number,
+    format: (value: number) => string = formatPercent,
+    disabled = false,
   ): ReactElement => {
     const commit = (): void => {
       if (draft[key] !== config[key]) onChange({ [key]: draft[key] });
@@ -57,7 +84,7 @@ export function FogSettingsPanel({
     return (
       <label className={styles.row}>
         <span className={styles.label}>
-          {label} {Math.round(draft[key] * 100)}%
+          {label} {format(draft[key])}
         </span>
         <input
           className={styles.slider}
@@ -66,6 +93,7 @@ export function FogSettingsPanel({
           max={max}
           step={step}
           value={draft[key]}
+          disabled={disabled}
           onChange={(e) => setDraft((prev) => ({ ...prev, [key]: Number(e.target.value) }))}
           onPointerUp={commit}
           onKeyUp={commit}
@@ -88,6 +116,27 @@ export function FogSettingsPanel({
           <option value="pm2">Mask pipeline</option>
         </select>
       </label>
+
+      <div className={styles.section}>
+        <span className={styles.sectionTitle}>Peripheral vision</span>
+        {renderSlider(
+          'peripheralVisionRadius',
+          'Radius',
+          RADIUS_STEP,
+          PERIPHERAL_VISION_RADIUS_MIN,
+          PERIPHERAL_VISION_RADIUS_MAX,
+          formatCells,
+        )}
+        {renderSlider(
+          'peripheralShroudAlpha',
+          'Shroud',
+          ALPHA_STEP,
+          0,
+          1,
+          formatPercent,
+          config.peripheralVisionRadius === 0,
+        )}
+      </div>
 
       {isPm2 && (
         <>

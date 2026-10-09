@@ -1,0 +1,36 @@
+/* SaveStatusIndicator — Phase 5H */
+
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.saving {
+  color: var(--color-text-muted, #8b8b9e);
+}
+
+.saved {
+  color: #7cfc00;
+}
+
+.error {
+  color: #ff6b6b;
+}
+
+.retryBtn {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid #ff6b6b;
+  border-radius: 4px;
+  color: #ff6b6b;
+  font-size: 0.7rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.retryBtn:hover {
+  background: rgba(255, 107, 107, 0.12);
+}

@@ -11,66 +11,58 @@
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 6B | Character-Token Linking | Not Started |
-| 6C | Interactive Rolling | Not Started |
-| 6D | Inventory & Spells | Not Started |
-| 6E | Character Export & History | Not Started |
+| 6E | Character Export & History | Deferred |
+| 6F | System-Aware Character Sheets | Not Started |
+| 6G | Character Progression | Not Started |
 
 ---
 
-## Phase 6B: Character-Token Linking
+## Phase 6F: System-Aware Character Sheets
 
-**Dependencies:** Phase 6A + play-area Phase 4B
+**Dependencies:** Phase 6A + campaigns Phase 3C
 
 ### Tasks
-- [ ] Prisma `CharacterToken` join table (characterId, tokenId, campaignId)
-- [ ] Link/unlink character to token API
-- [ ] Token displays character portrait, name, current HP on canvas
-- [ ] HP changes on character sheet → token updates (and vice versa)
-- [ ] Character link modal for DM (bulk assignment)
-- [ ] Player can only link their own character to their own token (ownership via `Character.userId`)
-- [ ] User-character assignment per campaign (prevent duplicate — no two users same character)
-- [ ] Dropdown to select/change character per player
-- [ ] WebSocket broadcast on assignment change (`characters:assignment:changed`)
-- [ ] Shared types: `CharacterToken`, `CharacterLinkPayload`, `CharacterAssignmentPayload`
-- [ ] Tests: link/unlink, HP sync, permission enforcement
-- **Token ownership chain:** `Character.userId` → `CharacterToken` → `Token` (see `.project/notes/rbac-architecture.md`)
+- [ ] Prisma: add `Character.systemData Json` for system-specific fields; migration backfills existing characters with an empty 5e shape
+- [ ] Shared types: `Dnd5eCharacterData`, `Pf2eCharacterData` (ancestry, heritage, background, class DC, proficiency ranks for skills/saves/perception, hero points), discriminated by `system`
+- [ ] Shared Zod validator: discriminated union for `systemData`
+- [ ] Server: validate `systemData` against the campaign's `gameSystem` on create/update (422 on mismatch)
+- [ ] Derive proficiency, skill, and save modifiers via `getGameSystemRules()` instead of the stored `proficiencyBonus` for PF2e
+- [ ] Character sheet: shared header (name, level, HP, AC, ability scores, speed) plus system-specific section components (`Dnd5eSheetSection`, `Pf2eSheetSection`)
+- [ ] Relabel "Race" as "Ancestry" for PF2e campaigns
+- [ ] Character create form adapts fields to the campaign's game system
+- [ ] Write tests: validator per system, mismatch rejection, derived modifiers for both systems, sheet renders the correct section per system
+
+### Decisions
+- Keep shared columns (name, level, HP, AC, ability scores, speed) relational; system-specific data goes in one validated JSON column
+- Modifiers are derived from rules at read time, not stored, so rules fixes apply to every sheet
 
 ---
 
-## Phase 6C: Interactive Rolling
+## Phase 6G: Character Progression
 
-**Dependencies:** Phase 6A + play-area Phase 4E
+**Dependencies:** Phase 6F
 
 ### Tasks
-- [ ] Click ability score → roll `d20 + modifier`
-- [ ] Click skill → roll with proficiency bonus
-- [ ] Click weapon/attack → roll attack + damage dice
-- [ ] Roll results sent to campaign chat via Socket.IO
-- [ ] Formula display in chat: `d20 + 5 (DEX) = 18`
-- [ ] Advantage/disadvantage toggle (roll 2d20, take higher/lower)
-- [ ] Initiative roll integration (character initiative modifier)
-- [ ] Tests: modifier calculation, roll-to-chat flow, advantage logic
+- [ ] Prisma: add `Character.xp Int @default(0)` and `Campaign.progressionMode` enum (`xp`, `milestone`, default `xp`)
+- [ ] Prisma: add `CharacterAdvancement` model (`characterId`, `campaignId`, `fromLevel`, `toLevel`, `choices Json`, `createdAt`) as an append-only log
+- [ ] DM setting to choose the campaign progression mode
+- [ ] `POST /api/campaigns/:id/characters/xp` — DM only; awards XP to one or many characters (XP mode)
+- [ ] `POST /api/campaigns/:id/characters/milestone` — DM only; grants a level to one or many characters (milestone mode)
+- [ ] Socket broadcast `characters:progression:updated` to the campaign room after awards
+- [ ] "Level up available" badge on the sheet when XP crosses the system threshold or a milestone is granted
+- [ ] Level-up wizard (owner only), system-aware: 5e HP (roll or average) and ASI levels; PF2e fixed HP (class + Con) and boost levels (5/10/15/20); records choices in `CharacterAdvancement` and updates level/maxHp
+- [ ] DM can undo the most recent advancement for a character
+- [ ] DM progression panel: party XP/level overview with bulk award
+- [ ] Write tests: XP thresholds for both systems, milestone grant, wizard HP math per system, ownership/RBAC, undo restores previous level and HP, broadcast
+
+### Decisions
+- Players run their own level-up; the DM awards XP/milestones and can undo
+- Feat, spell, and class-feature catalogs are out of scope — choices are recorded as free-form entries in `choices`
+- The advancement log is append-only; undo writes a reversal instead of deleting history
 
 ---
 
-## Phase 6D: Inventory & Spells
-
-**Dependencies:** Phase 6A
-
-### Tasks
-- [ ] Inventory management UI (items with name, weight, quantity, properties)
-- [ ] Auto-calculated encumbrance
-- [ ] Encumbrance visual states: normal, encumbered, overburdened, immobilized
-- [ ] Spell list with slot tracking per spell level
-- [ ] Prepared spells management (toggle prepared status)
-- [ ] Drag-and-drop item/spell reordering
-- [ ] Real-time character editing via WebSocket (`characters:sheet:updated`) — DM and owner edits broadcast to connected clients
-- [ ] Tests: encumbrance calculation, spell slot tracking, visual state thresholds, real-time sync
-
----
-
-## Phase 6E: Character Export & History
+## Phase 6E: Character Export & History (Post-MVP)
 
 **Dependencies:** Phase 6A
 
@@ -89,6 +81,7 @@
 | campaigns Phase 3A | Characters scoped to campaigns |
 | play-area Phase 4B | Token linking requires token system |
 | play-area Phase 4E | Interactive rolling sends to play area chat/dice |
+| campaigns Phase 3C | Sheets and progression use game system rules |
 
 | Depended On By | Why |
 |---------------|-----|
@@ -111,5 +104,5 @@
 
 **What we're changing:**
 - Project_Pathfinder characters page was a placeholder → new build designs character sheets as a full feature from the start
-- Project_Pathfinder stored character data in a flat structure → new build uses JSON columns for extensible data (inventory, spells, features)
+- Project_Pathfinder stored character data in a flat structure → new build uses JSON columns for extensible data (spells, features); inventory is normalized in the `inventory` feature instead of living in character JSON
 - Project_Pathfinder used raw SQL → new build uses Prisma with typed queries

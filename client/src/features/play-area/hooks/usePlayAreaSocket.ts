@@ -2,42 +2,53 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 
 import type {
-  AuraUpdatedPayload,
-  ChatReceivedPayload,
-  DrawClearPayload,
-  DrawClearedPayload,
-  DrawStrokePayload,
-  DrawStrokeRelayedPayload,
-  FogConfigUpdatedPayload,
-  FogExplorationSyncPayload,
-  FogHiddenPayload,
-  FogRegionDeletedPayload,
-  FogRevealedPayload,
-  InitiativeUpdatedPayload,
-  MeasureBroadcastPayload,
-  MeasureClearPayload,
-  MeasureClearedPayload,
-  MeasureRelayedPayload,
-  PresencePayload,
-  SocketErrorPayload,
-  TokenCreatedPayload,
-  TokenDeletedPayload,
-  TokenMovedPayload,
-  TokenUpdatedPayload,
-  TokenVisionSyncPayload,
+    AuraUpdatedPayload,
+    ChatReceivedPayload,
+    DoorToggledPayload,
+    DrawClearPayload,
+    DrawClearedPayload,
+    DrawStrokePayload,
+    DrawStrokeRelayedPayload,
+    FogConfigUpdatedPayload,
+    FogExplorationSyncPayload,
+    FogHiddenPayload,
+    FogRegionDeletedPayload,
+    FogRevealedPayload,
+    InitiativeUpdatedPayload,
+    LightsUpdatedPayload,
+    MeasureBroadcastPayload,
+    MeasureClearPayload,
+    MeasureClearedPayload,
+    MeasureRelayedPayload,
+    PresencePayload,
+    SocketErrorPayload,
+    TemporaryLightCreatePayload,
+    TemporaryLightDeletePayload,
+    TemporaryLightUpdatePayload,
+    TemporaryLightsUpdatedPayload,
+    TokenCreatedPayload,
+    TokenDeletedPayload,
+    TokenMovedPayload,
+    TokenUpdatedPayload,
+    TokenVisionSyncPayload,
+    VisionUpdatedPayload,
+    WallsUpdatedPayload,
 } from '@vtt/shared';
 import {
-  AURA_EVENTS,
-  CHAT_EVENTS,
-  DICE_EVENTS,
-  DRAW_EVENTS,
-  FOG_CONFIG_EVENTS,
-  FOG_EVENTS,
-  INITIATIVE_EVENTS,
-  MEASURE_EVENTS,
-  PLAY_AREA_EVENTS,
-  SOCKET_TOKEN_MOVE_DEBOUNCE_MS,
-  TOKEN_VISION_EVENTS,
+    AURA_EVENTS,
+    CHAT_EVENTS,
+    DICE_EVENTS,
+    DRAW_EVENTS,
+    EDITOR_EVENTS,
+    FOG_CONFIG_EVENTS,
+    FOG_EVENTS,
+    INITIATIVE_EVENTS,
+    LIGHT_EVENTS,
+    MEASURE_EVENTS,
+    PLAY_AREA_EVENTS,
+    SOCKET_TOKEN_MOVE_DEBOUNCE_MS,
+    TOKEN_VISION_EVENTS,
+    VISION_EVENTS,
 } from '@vtt/shared';
 
 interface UsePlayAreaSocketOptions {
@@ -60,6 +71,16 @@ interface UsePlayAreaSocketOptions {
   onDrawStroked?: (payload: DrawStrokeRelayedPayload) => void;
   onDrawCleared?: (payload: DrawClearedPayload) => void;
   onInitiativeUpdated?: (payload: InitiativeUpdatedPayload) => void;
+  /** Editor wall geometry changed (Phase 5F) — re-fetch any cached walls. */
+  onWallsUpdated?: (payload: WallsUpdatedPayload) => void;
+  /** Editor authored lights changed (Phase 5G) — re-fetch any cached lights. */
+  onLightsUpdated?: (payload: LightsUpdatedPayload) => void;
+  /** Temporary DM light snapshot changed (Phase PM4). */
+  onTemporaryLightsUpdated?: (payload: TemporaryLightsUpdatedPayload) => void;
+  /** Line-of-sight polygons + visible doors changed (Phase PM3). */
+  onVisionUpdated?: (payload: VisionUpdatedPayload) => void;
+  /** A door was opened or closed (Phase PM3). */
+  onDoorToggled?: (payload: DoorToggledPayload) => void;
   /** Called after a reconnect (not the initial connect). Use to re-sync state from REST. */
   onReconnect?: () => void;
 }
@@ -79,6 +100,11 @@ interface UsePlayAreaSocketReturn {
   emitInitiativeAdvance: () => void;
   emitInitiativeEnd: () => void;
   emitInitiativeReorder: (tokenIds: string[]) => void;
+  emitLightCreate: (payload: TemporaryLightCreatePayload) => void;
+  emitLightUpdate: (payload: TemporaryLightUpdatePayload) => void;
+  emitLightDelete: (payload: TemporaryLightDeletePayload) => void;
+  emitVisionRefresh: (sceneId: string) => void;
+  emitDoorToggle: (sceneId: string, wallId: string) => void;
   isConnected: boolean;
 }
 
@@ -110,6 +136,11 @@ export function usePlayAreaSocket({
   onDrawStroked,
   onDrawCleared,
   onInitiativeUpdated,
+  onWallsUpdated,
+  onLightsUpdated,
+  onTemporaryLightsUpdated,
+  onVisionUpdated,
+  onDoorToggled,
   onReconnect,
 }: UsePlayAreaSocketOptions): UsePlayAreaSocketReturn {
   const socketRef = useRef<Socket | null>(null);
@@ -134,6 +165,11 @@ export function usePlayAreaSocket({
   const onDrawStrokedRef = useRef(onDrawStroked);
   const onDrawClearedRef = useRef(onDrawCleared);
   const onInitiativeUpdatedRef = useRef(onInitiativeUpdated);
+  const onWallsUpdatedRef = useRef(onWallsUpdated);
+  const onLightsUpdatedRef = useRef(onLightsUpdated);
+  const onTemporaryLightsUpdatedRef = useRef(onTemporaryLightsUpdated);
+  const onVisionUpdatedRef = useRef(onVisionUpdated);
+  const onDoorToggledRef = useRef(onDoorToggled);
   const onReconnectRef = useRef(onReconnect);
 
   useEffect(() => {
@@ -190,6 +226,21 @@ export function usePlayAreaSocket({
   useEffect(() => {
     onInitiativeUpdatedRef.current = onInitiativeUpdated;
   }, [onInitiativeUpdated]);
+  useEffect(() => {
+    onWallsUpdatedRef.current = onWallsUpdated;
+  }, [onWallsUpdated]);
+  useEffect(() => {
+    onLightsUpdatedRef.current = onLightsUpdated;
+  }, [onLightsUpdated]);
+  useEffect(() => {
+    onTemporaryLightsUpdatedRef.current = onTemporaryLightsUpdated;
+  }, [onTemporaryLightsUpdated]);
+  useEffect(() => {
+    onVisionUpdatedRef.current = onVisionUpdated;
+  }, [onVisionUpdated]);
+  useEffect(() => {
+    onDoorToggledRef.current = onDoorToggled;
+  }, [onDoorToggled]);
   useEffect(() => {
     onReconnectRef.current = onReconnect;
   }, [onReconnect]);
@@ -302,6 +353,26 @@ export function usePlayAreaSocket({
       onInitiativeUpdatedRef.current?.(payload);
     };
 
+    const handleWallsUpdated = (payload: WallsUpdatedPayload): void => {
+      onWallsUpdatedRef.current?.(payload);
+    };
+
+    const handleLightsUpdated = (payload: LightsUpdatedPayload): void => {
+      onLightsUpdatedRef.current?.(payload);
+    };
+
+    const handleTemporaryLightsUpdated = (payload: TemporaryLightsUpdatedPayload): void => {
+      onTemporaryLightsUpdatedRef.current?.(payload);
+    };
+
+    const handleVisionUpdated = (payload: VisionUpdatedPayload): void => {
+      onVisionUpdatedRef.current?.(payload);
+    };
+
+    const handleDoorToggled = (payload: DoorToggledPayload): void => {
+      onDoorToggledRef.current?.(payload);
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     // In Socket.IO v4 the 'reconnect' event is emitted by the Manager, not the Socket
@@ -325,6 +396,11 @@ export function usePlayAreaSocket({
     socket.on(DRAW_EVENTS.DRAW_STROKED, handleDrawStroked);
     socket.on(DRAW_EVENTS.DRAW_CLEARED, handleDrawCleared);
     socket.on(INITIATIVE_EVENTS.INITIATIVE_UPDATED, handleInitiativeUpdated);
+    socket.on(EDITOR_EVENTS.WALLS_UPDATED, handleWallsUpdated);
+    socket.on(EDITOR_EVENTS.LIGHTS_UPDATED, handleLightsUpdated);
+    socket.on(LIGHT_EVENTS.LIGHT_UPDATED, handleTemporaryLightsUpdated);
+    socket.on(VISION_EVENTS.VISION_UPDATED, handleVisionUpdated);
+    socket.on(VISION_EVENTS.DOOR_TOGGLED, handleDoorToggled);
     socket.on(PLAY_AREA_EVENTS.ERROR, (payload: SocketErrorPayload) => {
       console.error('[PlayAreaSocket] Server error:', payload.code, payload.message);
     });
@@ -453,6 +529,37 @@ export function usePlayAreaSocket({
     [campaignId],
   );
 
+  const emitLightCreate = useCallback((payload: TemporaryLightCreatePayload): void => {
+    if (!socketRef.current?.connected) return;
+    socketRef.current.emit(LIGHT_EVENTS.LIGHT_CREATE, payload);
+  }, []);
+
+  const emitLightUpdate = useCallback((payload: TemporaryLightUpdatePayload): void => {
+    if (!socketRef.current?.connected) return;
+    socketRef.current.emit(LIGHT_EVENTS.LIGHT_UPDATE, payload);
+  }, []);
+
+  const emitLightDelete = useCallback((payload: TemporaryLightDeletePayload): void => {
+    if (!socketRef.current?.connected) return;
+    socketRef.current.emit(LIGHT_EVENTS.LIGHT_DELETE, payload);
+  }, []);
+
+  const emitVisionRefresh = useCallback(
+    (sceneId: string): void => {
+      if (!campaignId || !socketRef.current?.connected) return;
+      socketRef.current.emit(VISION_EVENTS.VISION_REFRESH, { campaignId, sceneId });
+    },
+    [campaignId],
+  );
+
+  const emitDoorToggle = useCallback(
+    (sceneId: string, wallId: string): void => {
+      if (!campaignId || !socketRef.current?.connected) return;
+      socketRef.current.emit(VISION_EVENTS.DOOR_TOGGLE, { campaignId, sceneId, wallId });
+    },
+    [campaignId],
+  );
+
   return {
     emitTokenMove,
     emitChatSend,
@@ -468,6 +575,11 @@ export function usePlayAreaSocket({
     emitInitiativeAdvance,
     emitInitiativeEnd,
     emitInitiativeReorder,
+    emitLightCreate,
+    emitLightUpdate,
+    emitLightDelete,
+    emitVisionRefresh,
+    emitDoorToggle,
     isConnected,
   };
 }

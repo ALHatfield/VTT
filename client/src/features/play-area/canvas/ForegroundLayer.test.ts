@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TokenVisionReveal } from '@vtt/shared';
+import type { TokenVisionReveal, VisibilityPolygon } from '@vtt/shared';
+import { DEFAULT_FOG_MASK_CONFIG, FOG_OVERLAY_ALPHA } from '@vtt/shared';
 
 // ---------------------------------------------------------------------------
 // Minimal pixi.js mock — tracks circle() calls on each Graphics
@@ -12,13 +13,16 @@ vi.mock('pixi.js', () => {
     eventMode = 'none';
     _circles: { x: number; y: number; r: number }[] = [];
     _fills: { color: number; alpha: number }[] = [];
+    _moves = 0;
 
     clear(): this {
       this._circles = [];
       this._fills = [];
+      this._moves = 0;
       return this;
     }
     moveTo(): this {
+      this._moves += 1;
       return this;
     }
     lineTo(): this {
@@ -80,6 +84,7 @@ import { ForegroundLayer } from './ForegroundLayer';
 type MockFogCutouts = {
   visible: boolean;
   _circles: { x: number; y: number; r: number }[];
+  _moves: number;
 };
 
 function getFogCutouts(l: ForegroundLayer): MockFogCutouts {
@@ -167,6 +172,51 @@ describe('ForegroundLayer — setTokenVisionReveals()', () => {
   });
 });
 
+describe('ForegroundLayer — setVisibilityPolygons() (PM3, legacy fog)', () => {
+  let layer: ForegroundLayer;
+  const reveals: TokenVisionReveal[] = [
+    { tokenId: 'tok-1', x: 2, y: 3, visionRadius: 6, sceneId: 'scene-1' },
+    { tokenId: 'tok-2', x: 9, y: 9, visionRadius: 6, sceneId: 'scene-1' },
+  ];
+  const polygon: VisibilityPolygon = {
+    emitterId: 'tok-1',
+    source: 'token',
+    partyVisible: true,
+    sceneId: 'scene-1',
+    origin: { x: 160, y: 224 },
+    radius: 384,
+    points: [
+      { x: 160, y: 0 },
+      { x: 400, y: 224 },
+      { x: 160, y: 400 },
+    ],
+  };
+
+  beforeEach(() => {
+    layer = new ForegroundLayer();
+    layer.setMapBounds(2048, 2048);
+    layer.setObfuscationEnabled(true);
+    layer.setTokenVisionReveals(reveals, 64);
+  });
+
+  it('cuts the LOS polygon instead of the circle for an obstructed emitter', () => {
+    layer.setVisibilityPolygons([polygon]);
+
+    const fc = getFogCutouts(layer);
+    expect(fc._moves).toBe(1);
+    expect(fc._circles).toEqual([{ x: 9 * 64 + 32, y: 9 * 64 + 32, r: 384 }]);
+  });
+
+  it('restores the circle once the polygon is cleared', () => {
+    layer.setVisibilityPolygons([polygon]);
+    layer.setVisibilityPolygons([]);
+
+    const fc = getFogCutouts(layer);
+    expect(fc._moves).toBe(0);
+    expect(fc._circles).toHaveLength(2);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // ForegroundLayer — setViewMode()
 // ---------------------------------------------------------------------------
@@ -208,5 +258,96 @@ describe('ForegroundLayer — setViewMode()', () => {
     layer.setViewMode('dm');
     layer.setFogRegions([]);
     expect(getFogContainer(layer).visible).toBe(false);
+  });
+});
+
+describe('ForegroundLayer — peripheral vision (legacy fog)', () => {
+  type MockLayerGraphics = {
+    _circles: { x: number; y: number; r: number }[];
+    _fills: { color: number; alpha: number }[];
+  };
+  type MockGroup = { visible: boolean; children: MockLayerGraphics[] };
+
+  const groups = (l: ForegroundLayer): { fog: MockGroup; peripheral: MockGroup } => ({
+    fog: l.children[0] as unknown as MockGroup,
+    peripheral: l.children[1] as unknown as MockGroup,
+  });
+
+  let layer: ForegroundLayer;
+
+  beforeEach(() => {
+    layer = new ForegroundLayer();
+    layer.setMapBounds(2048, 2048);
+    layer.setObfuscationEnabled(true);
+    layer.setTokenVisionReveals(
+      [{ tokenId: 'tok-1', x: 2, y: 3, visionRadius: 6, sceneId: 'scene-1' }],
+      64,
+    );
+  });
+
+  it('keeps the standard overlay and no darkness layer when the radius is 0', () => {
+    const { fog, peripheral } = groups(layer);
+    expect(fog.children[0]._fills.at(-1)?.alpha).toBe(FOG_OVERLAY_ALPHA);
+    expect(peripheral.visible).toBe(false);
+  });
+
+  it('dims to the peripheral shroud and blacks out beyond the peripheral radius', () => {
+    layer.setFogMaskConfig({
+      ...DEFAULT_FOG_MASK_CONFIG,
+      peripheralVisionRadius: 4.5,
+      peripheralShroudAlpha: 0.7,
+    });
+
+    const { fog, peripheral } = groups(layer);
+    expect(fog.children[0]._fills.at(-1)?.alpha).toBe(0.7);
+    expect(peripheral.visible).toBe(true);
+    expect(peripheral.children[0]._fills.at(-1)?.alpha).toBe(1);
+    expect(peripheral.children[1]._circles).toEqual([
+      { x: 160, y: 224, r: 384 },
+      { x: 160, y: 224, r: 288 },
+    ]);
+  });
+
+  it('skips peripheral circles for blind emitters', () => {
+    layer.setFogMaskConfig({ ...DEFAULT_FOG_MASK_CONFIG, peripheralVisionRadius: 3 });
+    layer.setTokenVisionReveals(
+      [{ tokenId: 'tok-1', x: 2, y: 3, visionRadius: 0, sceneId: 'scene-1' }],
+      64,
+    );
+
+    expect(groups(layer).peripheral.children[1]._circles).toHaveLength(0);
+  });
+});
+
+describe('ForegroundLayer — setFogSuppressed() (editor mode)', () => {
+  let layer: ForegroundLayer;
+
+  beforeEach(() => {
+    layer = new ForegroundLayer();
+    layer.setMapBounds(2048, 2048);
+    layer.setViewMode('player');
+    layer.setFogRegions([]);
+  });
+
+  it('hides player-preview fog while suppressed', () => {
+    expect(getFogContainer(layer).visible).toBe(true);
+    layer.setFogSuppressed(true);
+    expect(getFogContainer(layer).visible).toBe(false);
+  });
+
+  it('stays hidden when fog state changes while suppressed', () => {
+    layer.setFogSuppressed(true);
+    layer.setTokenVisionReveals(
+      [{ tokenId: 'tok-1', x: 1, y: 1, visionRadius: 6, sceneId: 'scene-1' }],
+      64,
+    );
+    expect(getFogContainer(layer).visible).toBe(false);
+    expect(getFogCutouts(layer)._circles).toHaveLength(0);
+  });
+
+  it('restores fog when suppression ends', () => {
+    layer.setFogSuppressed(true);
+    layer.setFogSuppressed(false);
+    expect(getFogContainer(layer).visible).toBe(true);
   });
 });

@@ -252,6 +252,7 @@ async function main() {
   const completed = [];
   const inProgress = [];
   const notStarted = [];
+  const deferred = [];
 
   const slugsToProcess = filterSlug
     ? roadmapRows.filter((r) => r.slug === filterSlug)
@@ -303,6 +304,8 @@ async function main() {
         inProgress.push(
           `${row.slug} ${fullId}: ${phase.name}${taskStr}`
         );
+      } else if (phase.status === 'Deferred') {
+        deferred.push(`${row.slug} ${fullId}: ${phase.name}`);
       } else {
         notStarted.push(
           `${row.slug} ${fullId}: ${phase.name}${taskStr}`
@@ -342,7 +345,7 @@ async function main() {
     for (const archive of completedArchives) {
       // archive format: "slug-phaseId" e.g. "play-area-4A", "auth-1A"
       // Extract slug: everything before the last dash+phaseId
-      const phaseMatch = archive.match(/^(.+)-(\d+[A-Z](?:\.\d+)?)$/);
+      const phaseMatch = archive.match(/^(.+)-(\d+[A-Z](?:\.\d+)?|PM\d+)$/);
       if (!phaseMatch) {
         continue;
       }
@@ -400,7 +403,12 @@ async function main() {
       console.log(`  ⏳ ${item}`);
     }
   }
-
+  if (deferred.length > 0) {
+    console.log('\nDEFERRED (intentionally sidelined):');
+    for (const item of deferred) {
+      console.log(`  \u{1F4A4} ${item}`);
+    }
+  }
   if (drift.length > 0) {
     console.log('\nDRIFT DETECTED:');
     for (const item of drift) {

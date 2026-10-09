@@ -7,7 +7,7 @@ import path from 'node:path';
 const ROOT_DIR = process.cwd();
 const FEATURES_DIR = path.join(ROOT_DIR, '.project', 'features');
 const ARCHIVE_DIR = path.join(ROOT_DIR, '.project', '.archive', 'features');
-const COMPLETE_DIR = path.join(ROOT_DIR, '.project', 'complete');
+const COMPLETE_DIR = path.join(ROOT_DIR, '.project', '.archive', 'complete');
 const TODAY = new Date().toISOString().slice(0, 10);
 
 const args = new Set(process.argv.slice(2));

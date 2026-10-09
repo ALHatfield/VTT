@@ -197,7 +197,7 @@ export function CharacterCreate(): ReactElement {
           <button
             type="button"
             className={styles.cancelButton}
-            onClick={() => navigate(`/campaigns/${campaignId}/characters`)}
+            onClick={() => navigate(`/campaigns/${campaignId}`)}
           >
             Cancel
           </button>

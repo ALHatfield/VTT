@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { CampaignForm } from './CampaignForm';
 import styles from './CampaignList.module.css';
+import { GameSystemBadge } from './GameSystemBadge';
 import { useCampaigns } from './hooks/useCampaigns';
 
 function roleBadgeClass(role: Campaign['role']): string {
@@ -78,9 +79,12 @@ export function CampaignList(): ReactElement {
             <div key={campaign.id} className={styles.card}>
               <div className={styles.cardTop}>
                 <h3 className={styles.cardTitle}>{campaign.name}</h3>
-                <span className={`${styles.roleBadge} ${roleBadgeClass(campaign.role)}`}>
-                  {campaign.role.toUpperCase()}
-                </span>
+                <div className={styles.cardBadges}>
+                  <GameSystemBadge system={campaign.gameSystem} />
+                  <span className={`${styles.roleBadge} ${roleBadgeClass(campaign.role)}`}>
+                    {campaign.role.toUpperCase()}
+                  </span>
+                </div>
               </div>
               {campaign.description && (
                 <p className={styles.cardDescription}>{campaign.description}</p>

@@ -6,7 +6,7 @@ import path from 'node:path';
 
 const ROOT_DIR = process.cwd();
 const TEST_FILE_PATTERN = /\.(test|spec)\.(ts|tsx)$/;
-const TEST_ROOTS = ['client/src', 'server/src', 'shared/src', 'dice/src'];
+const TEST_ROOTS = ['client/src', 'server/src', 'shared/src'];
 // Transient socket errors from supertest/undici — retry the run once before failing
 const FLAKE_PATTERN = /ECONNRESET|ECONNREFUSED|EPIPE|socket hang up/;
 
@@ -74,7 +74,7 @@ function runVitest(cwd, testPaths, label) {
 }
 
 function resolveTestCommand(file) {
-  for (const workspace of ['client', 'server', 'shared', 'dice']) {
+  for (const workspace of ['client', 'server', 'shared']) {
     const prefix = `${workspace}/`;
     if (file.startsWith(prefix)) {
       return {
@@ -238,8 +238,7 @@ function compactRuns(files) {
   const clientFiles = files.filter((file) => file.startsWith('client/'));
   const serverFiles = files.filter((file) => file.startsWith('server/'));
   const sharedFiles = files.filter((file) => file.startsWith('shared/'));
-  const diceFiles = files.filter((file) => file.startsWith('dice/'));
-  return [clientFiles, ...serverFiles.map((file) => [file]), sharedFiles, diceFiles].filter(
+  return [clientFiles, ...serverFiles.map((file) => [file]), sharedFiles].filter(
     (runFiles) => runFiles.length > 0,
   );
 }

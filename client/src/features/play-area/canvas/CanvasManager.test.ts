@@ -86,10 +86,25 @@ vi.mock('pixi.js', () => {
 
   class MockSprite extends MockContainer {}
 
+  class MockText extends MockContainer {
+    text = '';
+    anchor = new MockPoint();
+    position = new MockPoint();
+    width = 0;
+    height = 0;
+  }
+
   class MockApplication {
     stage = new MockContainer();
     screen = { width: 800, height: 600 };
     canvas = document.createElement('canvas');
+    renderer = {
+      events: {
+        cursorStyles: { default: 'default' } as Record<string, string>,
+        rootBoundary: { hitTest: vi.fn((): unknown => null) },
+      },
+    };
+    ticker = { add: vi.fn(), remove: vi.fn() };
     init = vi.fn().mockResolvedValue(undefined);
     destroy = vi.fn();
   }
@@ -127,6 +142,7 @@ vi.mock('pixi.js', () => {
     Container: MockContainer,
     Graphics: MockGraphics,
     Sprite: MockSprite,
+    Text: MockText,
     Rectangle: class MockRectangle {
       constructor(
         public x = 0,
@@ -161,7 +177,7 @@ describe('CanvasManager', () => {
       expect(Application).toHaveBeenCalled();
     });
 
-    it('adds backgroundLayer, playgroundLayer, foregroundLayer to the world container in order', async () => {
+    it('adds background, light, playground, foreground layers to the world container in order', async () => {
       await manager.init(container);
 
       // Access private worldContainer via type assertion for test inspection
@@ -169,8 +185,23 @@ describe('CanvasManager', () => {
         .worldContainer;
 
       expect(worldContainer.children[0]).toBe(manager.backgroundLayer);
-      expect(worldContainer.children[1]).toBe(manager.playgroundLayer);
-      expect(worldContainer.children[2]).toBe(manager.foregroundLayer);
+      // Lights glow above the map but under tokens and fog (Phase PM4)
+      expect(worldContainer.children[1]).toBe(manager.lightLayer);
+      expect(worldContainer.children[2]).toBe(manager.playgroundLayer);
+      expect(worldContainer.children[3]).toBe(manager.foregroundLayer);
+    });
+
+    it('drives light animation from the app ticker and detaches on destroy', async () => {
+      await manager.init(container);
+      const app = (
+        manager as unknown as {
+          app: { ticker: { add: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> } };
+        }
+      ).app;
+      expect(app.ticker.add).toHaveBeenCalledOnce();
+      const tick = app.ticker.add.mock.calls[0]?.[0] as unknown;
+      manager.destroy();
+      expect(app.ticker.remove).toHaveBeenCalledWith(tick);
     });
 
     it('adds the world container to the stage', async () => {
@@ -523,12 +554,12 @@ describe('CanvasManager', () => {
       return { emit: stage.emit.bind(stage), self: stage };
     }
 
-    it('activates marquee graphic in play mode when tool is select (4F.3)', async () => {
+    it('activates marquee graphic in play mode when tool is select and Shift is held (4F.3)', async () => {
       await manager.init(container);
       // Default tool mode is 'select', play mode (editorModeEnabled = false)
       const stage = stageOf(manager);
 
-      stage.emit('pointerdown', { global: { x: 100, y: 100 }, target: stage.self });
+      stage.emit('pointerdown', { global: { x: 100, y: 100 }, shiftKey: true, target: stage.self });
       stage.emit('globalpointermove', { global: { x: 200, y: 200 } });
 
       const marquee = manager as unknown as { marqueeGraphic: unknown; marqueeActive: boolean };
@@ -863,14 +894,24 @@ describe('CanvasManager', () => {
       return { emit: stage.emit.bind(stage) };
     }
 
-    it('activates marquee in play mode when tool is select', async () => {
+    it('activates marquee in play mode when tool is select and Shift is held', async () => {
+      await manager.init(container);
+      manager.setToolMode('select');
+      const stage = stageOf(manager);
+      stage.emit('pointerdown', { global: { x: 0, y: 0 }, shiftKey: true });
+      stage.emit('globalpointermove', { global: { x: 200, y: 200 } });
+      const marquee = manager as unknown as { marqueeActive: boolean };
+      expect(marquee.marqueeActive).toBe(true);
+    });
+
+    it('does not activate marquee in play mode select tool without Shift', async () => {
       await manager.init(container);
       manager.setToolMode('select');
       const stage = stageOf(manager);
       stage.emit('pointerdown', { global: { x: 0, y: 0 }, shiftKey: false });
       stage.emit('globalpointermove', { global: { x: 200, y: 200 } });
       const marquee = manager as unknown as { marqueeActive: boolean };
-      expect(marquee.marqueeActive).toBe(true);
+      expect(marquee.marqueeActive).toBe(false);
     });
 
     it('does not activate marquee in play mode when tool is pan', async () => {
@@ -896,7 +937,7 @@ describe('CanvasManager', () => {
       manager.onTokensSelected = spy;
 
       const stage = stageOf(manager);
-      stage.emit('pointerdown', { global: { x: 100, y: 100 }, shiftKey: false });
+      stage.emit('pointerdown', { global: { x: 100, y: 100 }, shiftKey: true });
       stage.emit('globalpointermove', { global: { x: 300, y: 300 } });
       stage.emit('pointerup', { global: { x: 300, y: 300 } });
 
@@ -914,11 +955,86 @@ describe('CanvasManager', () => {
       manager.onTokensSelected = spy;
 
       const stage = stageOf(manager);
-      stage.emit('pointerdown', { global: { x: 100, y: 100 }, shiftKey: false });
+      stage.emit('pointerdown', { global: { x: 100, y: 100 }, shiftKey: true });
       stage.emit('globalpointermove', { global: { x: 200, y: 200 } });
       stage.emit('pointerup', { global: { x: 200, y: 200 } });
 
       expect(spy).toHaveBeenCalledWith([]);
+    });
+  });
+
+  describe('play-mode select tool left-drag pan', () => {
+    interface MockInternals {
+      app: {
+        canvas: HTMLCanvasElement;
+        stage: unknown;
+        renderer: {
+          events: {
+            cursorStyles: Record<string, string>;
+            rootBoundary: { hitTest: ReturnType<typeof vi.fn> };
+          };
+        };
+      };
+    }
+
+    function internals(mgr: CanvasManager): MockInternals['app'] {
+      return (mgr as unknown as MockInternals).app;
+    }
+
+    function pointer(type: string, init: PointerEventInit): Event {
+      const e = new MouseEvent(type, init) as MouseEvent & { pointerId: number };
+      Object.defineProperty(e, 'pointerId', { value: 1 });
+      return e;
+    }
+
+    function drag(canvas: HTMLCanvasElement, init: PointerEventInit = {}): void {
+      canvas.setPointerCapture = vi.fn();
+      canvas.dispatchEvent(pointer('pointerdown', { button: 0, clientX: 10, clientY: 10, ...init }));
+      canvas.dispatchEvent(pointer('pointermove', { clientX: 40, clientY: 30 }));
+      canvas.dispatchEvent(pointer('pointerup', { button: 0, clientX: 40, clientY: 30 }));
+    }
+
+    it('pans when dragging empty canvas', async () => {
+      await manager.init(container);
+      const panSpy = vi.spyOn(manager, 'pan');
+      drag(internals(manager).canvas);
+      expect(panSpy).toHaveBeenCalledWith(30, 20);
+    });
+
+    it('does not pan when the pointer is over an object with a pointerdown handler', async () => {
+      await manager.init(container);
+      const app = internals(manager);
+      const token = { listenerCount: (evt: string): number => (evt === 'pointerdown' ? 1 : 0) };
+      app.renderer.events.rootBoundary.hitTest.mockReturnValue(token);
+      const panSpy = vi.spyOn(manager, 'pan');
+      drag(app.canvas);
+      expect(panSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not pan when Shift is held', async () => {
+      await manager.init(container);
+      const panSpy = vi.spyOn(manager, 'pan');
+      drag(internals(manager).canvas, { shiftKey: true });
+      expect(panSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not left-drag pan in editor mode', async () => {
+      await manager.init(container);
+      manager.setEditorMode(true);
+      const panSpy = vi.spyOn(manager, 'pan');
+      drag(internals(manager).canvas);
+      expect(panSpy).not.toHaveBeenCalled();
+    });
+
+    it('uses a grab cursor only for the play-mode select tool', async () => {
+      await manager.init(container);
+      const styles = internals(manager).renderer.events.cursorStyles;
+      expect(styles.default).toBe('grab');
+      manager.setToolMode('measure');
+      expect(styles.default).toBe('default');
+      manager.setToolMode('select');
+      manager.setEditorMode(true);
+      expect(styles.default).toBe('default');
     });
   });
 

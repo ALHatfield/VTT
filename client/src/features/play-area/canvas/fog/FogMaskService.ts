@@ -1,14 +1,14 @@
 import { BlurFilter, Container, Graphics, RenderTexture } from 'pixi.js';
 
-import type { FogMaskConfig, FogRegion, VisionStamp } from '@vtt/shared';
+import type { FogMaskConfig, FogRegion, FogVertex, VisionStamp } from '@vtt/shared';
 import { DEFAULT_FOG_MASK_CONFIG, FOG_MASK_BLUR_STRENGTH } from '@vtt/shared';
 
 import {
-  batchStamps,
-  buildSoftEdgeRings,
-  computeMaskDimensions,
-  worldToMask,
-  type MaskDimensions,
+    batchStamps,
+    buildSoftEdgeRings,
+    computeMaskDimensions,
+    worldToMask,
+    type MaskDimensions,
 } from './fog-mask-math';
 
 /** Minimal slice of the PixiJS renderer the mask pipeline depends on. */
@@ -23,6 +23,8 @@ export interface FogMaskUpdate {
   exploredStamps: VisionStamp[];
   /** DM-drawn permanent reveal polygons. Always fully visible. */
   regions: FogRegion[];
+  /** Line-of-sight polygons (PM3). Currently visible, so drawn into both masks. */
+  visibilityPolygons?: FogVertex[][];
 }
 
 const MASK_COLOR = 0xffffff;
@@ -119,8 +121,12 @@ export class FogMaskService {
     if (!this.activeTexture || !this.exploredTexture) return;
 
     const start = performance.now();
-    this.composeInto(this.activeTexture, payload.activeStamps, payload.regions);
-    this.composeInto(this.exploredTexture, payload.exploredStamps, payload.regions);
+    const polygons = [
+      ...payload.regions.map((region) => region.vertices),
+      ...(payload.visibilityPolygons ?? []),
+    ];
+    this.composeInto(this.activeTexture, payload.activeStamps, polygons);
+    this.composeInto(this.exploredTexture, payload.exploredStamps, polygons);
     this.lastCompositionMs = performance.now() - start;
   }
 
@@ -137,10 +143,14 @@ export class FogMaskService {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  private composeInto(target: RenderTexture, stamps: VisionStamp[], regions: FogRegion[]): void {
+  private composeInto(
+    target: RenderTexture,
+    stamps: VisionStamp[],
+    polygons: FogVertex[][],
+  ): void {
     const { scale } = this.dimensions;
     const batches = batchStamps(stamps);
-    // Regions ride along in the first batch so an empty stamp set still renders them.
+    // Polygons ride along in the first batch so an empty stamp set still renders them.
     const passCount = Math.max(1, batches.length);
 
     this.ensurePool(passCount);
@@ -152,12 +162,12 @@ export class FogMaskService {
       if (i >= passCount) continue;
 
       if (i === 0) {
-        for (const region of regions) {
-          if (region.vertices.length < 3) continue;
-          const first = worldToMask(region.vertices[0], scale);
+        for (const vertices of polygons) {
+          if (vertices.length < 3) continue;
+          const first = worldToMask(vertices[0], scale);
           graphics.moveTo(first.x, first.y);
-          for (let v = 1; v < region.vertices.length; v += 1) {
-            const vertex = worldToMask(region.vertices[v], scale);
+          for (let v = 1; v < vertices.length; v += 1) {
+            const vertex = worldToMask(vertices[v], scale);
             graphics.lineTo(vertex.x, vertex.y);
           }
           graphics.closePath();

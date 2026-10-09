@@ -90,11 +90,11 @@
   pointer-events: none;
 }
 
-/* Dice Roller floats bottom-left of the canvas */
+/* Dice Roller floats bottom-right of the canvas */
 .diceRollerAnchor {
   position: absolute;
   bottom: 20px;
-  left: 20px;
+  right: 20px;
   z-index: 10;
   pointer-events: all;
 }

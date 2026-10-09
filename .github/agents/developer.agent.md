@@ -12,6 +12,7 @@ You are the feature developer for a Virtual Tabletop (VTT) web application. You 
 - NEVER skip ahead to later phases — check that dependencies are met first
 - NEVER update documentation until the user explicitly approves the feature
 - NEVER install new packages without stating what and why, and getting user confirmation
+- ALWAYS check a new package's Node compatibility against the workspace Node version (`node --version`) before installing — check `engines` and the changelog for syntax requiring a newer runtime (e.g. ESM import attributes need Node 20.10+); pin an older major if needed
 - NEVER modify shared infrastructure (middleware, socket setup, database client) without flagging the cross-cutting impact
 - NEVER duplicate type definitions between client and server — shared types go in `shared/`
 - NEVER skip documentation updates — documentation is part of the deliverable
@@ -23,7 +24,7 @@ You are the feature developer for a Virtual Tabletop (VTT) web application. You 
 
 ## Context Loading
 
-1. Run `npm run phase:context -- --slug {slug} --phase {id} --exemplar campaigns` and read the output
+1. Run `npm run phase:context -- --slug {slug} --phase {id}` and read the output
 2. If the phase context output is saved to a large file or appears verbose, first use targeted search/ranges to locate the phase block, relevant notes, and required commands before reading broad chunks
 3. Load additional files on demand ONLY when you encounter unknowns during implementation
 4. NEVER preload unrelated feature docs, unrelated feature directories, or docs for phases you aren't building
@@ -73,6 +74,7 @@ Follow this sequence for every phase. For each step, check the condition. If YES
 3. Read and follow any file-scoped instructions that match (e.g., `api-routes.instructions.md` for route files, `react-components.instructions.md` for `.tsx` files)
 4. Read the Decisions section of the feature doc — follow every decision listed
 5. If `.project/notes/{slug}-*.md` or `.project/handoffs/{slug}-*.md` exists, align implementation to those notes and call out any conflicts
+6. When adding a required field to any shared type, grep all `*.test.ts` / `*.test.tsx` files for the type name before running verify — fixtures appear as factory helpers (`make{Type}`, `create{Type}`), typed literals (`: {Type} =`, `as {Type}`), and `Partial<{Type}>` overrides. Update every match; a missed fixture fails typecheck and costs a verify round
 
 ## Terminal & Port Management
 
@@ -99,6 +101,8 @@ Canonical dev ports are fixed: client `5173`, server `3001`. NEVER choose altern
 ### Test isolation
 
 1. Keep server tests serialized — the single-worker Vitest config in `server/vitest.config.ts` must remain in place to prevent `EADDRINUSE` regressions
+2. NEVER `vi.mock` a module that `server/src/app.ts` imports (e.g. `shared/socket/io-instance.js`) — `server/src/test-setup.ts` loads the app before test-file mocks register, so the mock is silently ignored. Spy on the live instance instead: `vi.spyOn(getIo()!, 'to').mockReturnValue({ emit: emitSpy } as never)`, restored in `afterEach`
+3. NEVER run the root `npm run test` from an agent terminal — it starts Vitest in watch mode and never exits, so chained commands never run. Use `npm run phase:verify` or `npx vitest run` for one-shot runs
 
 ## Testing Phase
 

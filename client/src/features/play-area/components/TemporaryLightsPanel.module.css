@@ -1,0 +1,89 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hint {
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dragItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 4px 2px;
+  background: rgba(255, 170, 60, 0.04);
+  border: 1px dashed rgba(255, 170, 60, 0.4);
+  border-radius: 4px;
+  color: rgba(255, 190, 110, 0.9);
+  font-size: 0.6rem;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: grab;
+  user-select: none;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.dragItem:hover {
+  background: rgba(255, 170, 60, 0.1);
+  border-color: rgba(255, 170, 60, 0.7);
+}
+
+.dragItem:active {
+  cursor: grabbing;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 4px 0 0;
+  list-style: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 4px;
+}
+
+.itemName {
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 0.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.intensity {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  accent-color: #ffaa3c;
+}
+
+.deleteBtn {
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #8b8b9e);
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+
+.deleteBtn:hover {
+  color: rgb(220, 80, 80);
+}

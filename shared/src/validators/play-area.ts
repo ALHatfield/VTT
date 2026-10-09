@@ -1,20 +1,22 @@
 import { z } from 'zod';
 
 import {
-  AURA_RADIUS_MAX,
-  AURA_RADIUS_MIN,
-  CHAT_MESSAGE_MAX_LENGTH,
-  DEFAULT_VISION_RADIUS,
-  DICE_FORMULA_MAX_LENGTH,
-  DRAW_WIDTH_MAX,
-  DRAW_WIDTH_MIN,
-  FOG_MASK_RESOLUTION_MAX,
-  FOG_MASK_RESOLUTION_MIN,
-  TOKEN_NAME_MAX_LENGTH,
-  TOKEN_SIZE_MAX,
-  TOKEN_SIZE_MIN,
-  VISION_RADIUS_MAX,
+    AURA_RADIUS_MAX,
+    AURA_RADIUS_MIN,
+    CHAT_MESSAGE_MAX_LENGTH,
+    DEFAULT_VISION_RADIUS,
+    DRAW_WIDTH_MAX,
+    DRAW_WIDTH_MIN,
+    FOG_MASK_RESOLUTION_MAX,
+    FOG_MASK_RESOLUTION_MIN,
+    PERIPHERAL_VISION_RADIUS_MAX,
+    PERIPHERAL_VISION_RADIUS_MIN,
+    TOKEN_NAME_MAX_LENGTH,
+    TOKEN_SIZE_MAX,
+    TOKEN_SIZE_MIN,
+    VISION_RADIUS_MAX,
 } from '../constants/play-area.js';
+import { lightSourceCreateSchema, lightSourceUpdateSchema } from './editor.js';
 
 const tokenTypeSchema = z.enum(['player', 'monster', 'npc', 'misc']);
 const npcSubtypeSchema = z.enum(['ally', 'enemy']);
@@ -200,21 +202,6 @@ export const chatSendPayloadSchema = z.object({
 
 export type ChatSendInput = z.infer<typeof chatSendPayloadSchema>;
 
-// Dice payload schema (Phase 4E)
-export const diceRollPayloadSchema = z.object({
-  campaignId: z.string().min(1, 'campaignId is required'),
-  formula: z
-    .string()
-    .trim()
-    .min(1, 'Formula cannot be empty')
-    .max(
-      DICE_FORMULA_MAX_LENGTH,
-      `Formula must be ${DICE_FORMULA_MAX_LENGTH.toString()} characters or fewer`,
-    ),
-});
-
-export type DiceRollInput = z.infer<typeof diceRollPayloadSchema>;
-
 // Fog payload schemas (Phase 4F)
 const fogVertexSchema = z.object({
   x: z.number().finite().min(0, 'x must be a non-negative number'),
@@ -270,6 +257,12 @@ export const fogMaskConfigSchema = z.object({
   shroudAlpha: unitIntervalSchema,
   hiddenAlpha: unitIntervalSchema,
   edgeSoftnessRatio: unitIntervalSchema,
+  peripheralVisionRadius: z
+    .number()
+    .finite()
+    .min(PERIPHERAL_VISION_RADIUS_MIN, 'peripheralVisionRadius is too small')
+    .max(PERIPHERAL_VISION_RADIUS_MAX, 'peripheralVisionRadius is too large'),
+  peripheralShroudAlpha: unitIntervalSchema,
 });
 
 export type FogMaskConfigInput = z.infer<typeof fogMaskConfigSchema>;
@@ -324,3 +317,59 @@ export const drawClearPayloadSchema = z.object({
   campaignId: z.string().uuid('campaignId must be a valid UUID'),
   scope: z.enum(['all', 'own']),
 });
+
+// Dynamic lighting validators (Phase PM4)
+
+const lightTargetSchema = {
+  campaignId: z.string().uuid('campaignId must be a valid UUID'),
+  sceneId: z.string().uuid('sceneId must be a valid UUID'),
+};
+
+const lightIdSchema = z.string().uuid('lightId must be a valid UUID');
+
+export const temporaryLightCreatePayloadSchema = lightSourceCreateSchema.extend(lightTargetSchema);
+
+export type TemporaryLightCreateInput = z.infer<typeof temporaryLightCreatePayloadSchema>;
+
+export const temporaryLightUpdatePayloadSchema = z
+  .object({
+    ...lightTargetSchema,
+    lightId: lightIdSchema,
+    changes: lightSourceUpdateSchema,
+  })
+  .strict();
+
+export type TemporaryLightUpdateInput = z.infer<typeof temporaryLightUpdatePayloadSchema>;
+
+export const temporaryLightDeletePayloadSchema = z
+  .object({
+    ...lightTargetSchema,
+    lightId: lightIdSchema,
+  })
+  .strict();
+
+export type TemporaryLightDeleteInput = z.infer<typeof temporaryLightDeletePayloadSchema>;
+
+// Line of sight validators (Phase PM3)
+
+const ENTITY_ID_MAX_LENGTH = 64;
+
+// Not UUID-only: seeded campaigns/scenes use readable ids like `scene-seed-001`.
+function entityIdSchema(field: string): z.ZodString {
+  return z.string().min(1, `${field} is required`).max(ENTITY_ID_MAX_LENGTH);
+}
+
+export const visionRefreshPayloadSchema = z
+  .object({
+    campaignId: entityIdSchema('campaignId'),
+    sceneId: entityIdSchema('sceneId'),
+  })
+  .strict();
+
+export const doorTogglePayloadSchema = z
+  .object({
+    campaignId: entityIdSchema('campaignId'),
+    sceneId: entityIdSchema('sceneId'),
+    wallId: entityIdSchema('wallId'),
+  })
+  .strict();

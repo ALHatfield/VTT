@@ -1,22 +1,29 @@
 // LayersPanel — Phase 5C
 // Photoshop-style layer sidebar. Lists tile placements grouped by category tab,
 // with visibility / lock toggles, drag-to-reorder (z-index), and a TileInspector.
-import type { DragEvent, ReactElement } from 'react';
+import type { DragEvent, KeyboardEvent, ReactElement } from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import type { AssetCategory, TileAsset, TilePlacement } from '@vtt/shared';
 
 import styles from './LayersPanel.module.css';
+import type { LightsSectionProps } from './LightsSection';
+import { LightsSection } from './LightsSection';
 import type { TileUpdatePayload } from './TileInspector';
 import { TileInspector } from './TileInspector';
+import type { WallsSectionProps } from './WallsSection';
+import { WallsSection } from './WallsSection';
 
-type LayerTab = AssetCategory;
+type LayerTab = AssetCategory | 'walls' | 'lights';
 
-const TABS: { id: LayerTab; label: string }[] = [
+const TILE_TABS: { id: LayerTab; label: string }[] = [
   { id: 'background', label: 'BG' },
   { id: 'playground', label: 'Play' },
   { id: 'foreground', label: 'FG' },
 ];
+
+const WALLS_TAB: { id: LayerTab; label: string } = { id: 'walls', label: 'Walls' };
+const LIGHTS_TAB: { id: LayerTab; label: string } = { id: 'lights', label: 'Lights' };
 
 interface LayersPanelProps {
   placements: TilePlacement[];
@@ -33,6 +40,10 @@ interface LayersPanelProps {
   onUpdateTile: (id: string, payload: TileUpdatePayload) => void;
   onDeleteSelectedTiles: (ids: ReadonlySet<string>) => void;
   onAlignToGrid?: (placementId: string) => void;
+  /** Walls tab (Phase 5F) — omitted to hide the tab. */
+  walls?: WallsSectionProps;
+  /** Lights tab (Phase 5G) — omitted to hide the tab. */
+  lights?: LightsSectionProps;
 }
 
 export function LayersPanel({
@@ -50,8 +61,11 @@ export function LayersPanel({
   onUpdateTile,
   onDeleteSelectedTiles,
   onAlignToGrid,
+  walls,
+  lights,
 }: LayersPanelProps): ReactElement {
   const [activeTab, setActiveTab] = useState<LayerTab>('background');
+  const tabs = [...TILE_TABS, ...(walls ? [WALLS_TAB] : []), ...(lights ? [LIGHTS_TAB] : [])];
 
   // Tile rows for the active tab, sorted by z-index descending (top = highest)
   const tabPlacements = useMemo(
@@ -99,19 +113,33 @@ export function LayersPanel({
     setDragOverId(null);
   }, []);
 
+  const handleListKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLUListElement>) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (selectedTilePlacementIds.size === 0) return;
+      e.preventDefault();
+      onDeleteSelectedTiles(selectedTilePlacementIds);
+    },
+    [selectedTilePlacementIds, onDeleteSelectedTiles],
+  );
+
   return (
     <aside className={styles.panel}>
       <div className={styles.header}>
         <h2 className={styles.title}>Layers</h2>
         <div className={styles.tabs} role="tablist">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               role="tab"
               aria-selected={activeTab === tab.id}
               className={`${styles.tab} ${activeTab === tab.id ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                if (activeTab === 'walls' && tab.id !== 'walls') walls?.onDeactivateTool();
+                setActiveTab(tab.id);
+              }}
             >
               {tab.label}
             </button>
@@ -119,100 +147,108 @@ export function LayersPanel({
         </div>
       </div>
 
-      <div className={styles.body}>
-        {tabPlacements.length === 0 ? (
-          <p className={styles.placeholder}>No tiles in this layer.</p>
-        ) : (
-          <ul className={styles.list} role="listbox">
-            {tabPlacements.map((p) => {
-              const asset = assets.get(p.assetId);
-              const isSelected = selectedTilePlacementIds.has(p.id);
-              const isHidden = hiddenTileIds.has(p.id);
-              const isLocked = lockedTileIds.has(p.id);
-              const isDragTarget = dragOverId === p.id;
+      {activeTab === 'walls' && walls ? (
+        <WallsSection {...walls} />
+      ) : activeTab === 'lights' && lights ? (
+        <LightsSection {...lights} />
+      ) : (
+        <>
+          <div className={styles.body}>
+            {tabPlacements.length === 0 ? (
+              <p className={styles.placeholder}>No tiles in this layer.</p>
+            ) : (
+              <ul className={styles.list} role="listbox" onKeyDown={handleListKeyDown}>
+                {tabPlacements.map((p) => {
+                  const asset = assets.get(p.assetId);
+                  const isSelected = selectedTilePlacementIds.has(p.id);
+                  const isHidden = hiddenTileIds.has(p.id);
+                  const isLocked = lockedTileIds.has(p.id);
+                  const isDragTarget = dragOverId === p.id;
 
-              return (
-                <li
-                  key={p.id}
-                  draggable
-                  role="option"
-                  tabIndex={0}
-                  aria-selected={isSelected}
-                  className={`${styles.row} ${isSelected ? styles.rowSelected : ''} ${isDragTarget ? styles.rowDragOver : ''}`}
-                  onDragStart={(e) => handleDragStart(e, p.id)}
-                  onDragOver={(e) => handleDragOver(e, p.id)}
-                  onDrop={(e) => handleDrop(e, p.id)}
-                  onDragEnd={handleDragEnd}
-                  onClick={() => onSelectTile(p.id)}
-                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelectTile(p.id)}
-                >
-                  <span className={styles.dragHandle} aria-hidden="true">
-                    ⠿
-                  </span>
-                  {asset ? (
-                    <img
-                      src={asset.thumbnailUrl}
-                      alt={asset.filename}
-                      className={styles.thumbnail}
-                      draggable={false}
-                    />
-                  ) : (
-                    <span className={styles.thumbnailPlaceholder} />
-                  )}
-                  <span className={styles.name} title={asset?.filename ?? p.id}>
-                    {asset?.filename ?? p.id.slice(0, 8)}
-                  </span>
-                  <button
-                    type="button"
-                    title={isHidden ? 'Show tile' : 'Hide tile'}
-                    aria-label={isHidden ? 'Show tile' : 'Hide tile'}
-                    className={`${styles.iconBtn} ${isHidden ? styles.iconBtnOff : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleVisibility(p.id);
-                    }}
-                  >
-                    {isHidden ? '🚫' : '👁'}
-                  </button>
-                  <button
-                    type="button"
-                    title={isLocked ? 'Unlock tile' : 'Lock tile'}
-                    aria-label={isLocked ? 'Unlock tile' : 'Lock tile'}
-                    className={`${styles.iconBtn} ${isLocked ? styles.iconBtnLocked : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleLock(p.id);
-                    }}
-                  >
-                    {isLocked ? '🔒' : '🔓'}
-                  </button>
-                  <button
-                    type="button"
-                    title="Delete tile"
-                    aria-label="Delete tile"
-                    className={`${styles.iconBtn} ${styles.iconBtnDelete}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteTile(p.id);
-                    }}
-                  >
-                    ✕
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+                  return (
+                    <li
+                      key={p.id}
+                      draggable
+                      role="option"
+                      tabIndex={0}
+                      aria-selected={isSelected}
+                      className={`${styles.row} ${isSelected ? styles.rowSelected : ''} ${isDragTarget ? styles.rowDragOver : ''}`}
+                      onDragStart={(e) => handleDragStart(e, p.id)}
+                      onDragOver={(e) => handleDragOver(e, p.id)}
+                      onDrop={(e) => handleDrop(e, p.id)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => onSelectTile(p.id)}
+                      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelectTile(p.id)}
+                    >
+                      <span className={styles.dragHandle} aria-hidden="true">
+                        ⠿
+                      </span>
+                      {asset ? (
+                        <img
+                          src={asset.thumbnailUrl}
+                          alt={asset.filename}
+                          className={styles.thumbnail}
+                          draggable={false}
+                        />
+                      ) : (
+                        <span className={styles.thumbnailPlaceholder} />
+                      )}
+                      <span className={styles.name} title={asset?.filename ?? p.id}>
+                        {asset?.filename ?? p.id.slice(0, 8)}
+                      </span>
+                      <button
+                        type="button"
+                        title={isHidden ? 'Show tile' : 'Hide tile'}
+                        aria-label={isHidden ? 'Show tile' : 'Hide tile'}
+                        className={`${styles.iconBtn} ${isHidden ? styles.iconBtnOff : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleVisibility(p.id);
+                        }}
+                      >
+                        {isHidden ? '🚫' : '👁'}
+                      </button>
+                      <button
+                        type="button"
+                        title={isLocked ? 'Unlock tile' : 'Lock tile'}
+                        aria-label={isLocked ? 'Unlock tile' : 'Lock tile'}
+                        className={`${styles.iconBtn} ${isLocked ? styles.iconBtnLocked : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleLock(p.id);
+                        }}
+                      >
+                        {isLocked ? '🔒' : '🔓'}
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete tile"
+                        aria-label="Delete tile"
+                        className={`${styles.iconBtn} ${styles.iconBtnDelete}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteTile(p.id);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
 
-      <TileInspector
-        selectedPlacements={selectedPlacements}
-        assets={assets}
-        canvasGridSize={canvasGridSize}
-        onUpdate={onUpdateTile}
-        onDeleteAll={onDeleteSelectedTiles}
-        onAlignToGrid={onAlignToGrid}
-      />
+          <TileInspector
+            selectedPlacements={selectedPlacements}
+            assets={assets}
+            canvasGridSize={canvasGridSize}
+            onUpdate={onUpdateTile}
+            onDeleteAll={onDeleteSelectedTiles}
+            onAlignToGrid={onAlignToGrid}
+          />
+        </>
+      )}
     </aside>
   );
 }

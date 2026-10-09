@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FogMaskConfig, TokenVisionReveal, VisionStamp } from '@vtt/shared';
+import type { FogMaskConfig, TokenVisionReveal, VisibilityPolygon, VisionStamp } from '@vtt/shared';
 import { DEFAULT_FOG_MASK_CONFIG } from '@vtt/shared';
 
 import {
-  batchStamps,
-  buildSoftEdgeRings,
-  computeMaskDimensions,
-  maskToWorld,
-  mergeVisionStamps,
-  resolveExploredStamps,
-  resolveVisibilityState,
-  visionRevealsToStamps,
-  worldToMask,
+    batchStamps,
+    buildSoftEdgeRings,
+    computeMaskDimensions,
+    maskToWorld,
+    mergeVisionStamps,
+    resolveActiveVision,
+    resolveExploredStamps,
+    resolveVisibilityState,
+    visionRevealsToStamps,
+    worldToMask,
 } from './fog-mask-math';
 
 function makeStamp(overrides?: Partial<VisionStamp>): VisionStamp {
@@ -162,5 +163,68 @@ describe('resolveExploredStamps', () => {
     );
 
     expect(result.map((s) => s.id).sort()).toEqual(['active', 'old']);
+  });
+});
+
+describe('resolveActiveVision (PM3)', () => {
+  const reveal = (tokenId: string, visionRadius = 6): TokenVisionReveal => ({
+    tokenId,
+    x: 1,
+    y: 1,
+    visionRadius,
+    sceneId: 'scene-1',
+  });
+  const triangle = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 0, y: 100 },
+  ];
+  const polygon = (
+    emitterId: string,
+    points = triangle,
+    source: VisibilityPolygon['source'] = 'token',
+  ): VisibilityPolygon => ({
+    emitterId,
+    source,
+    partyVisible: true,
+    sceneId: 'scene-1',
+    origin: { x: 96, y: 96 },
+    radius: 384,
+    points,
+  });
+
+  it('always applies light polygons, independent of token reveals', () => {
+    const result = resolveActiveVision([], [polygon('torch-1', triangle, 'light')], 64);
+
+    expect(result.polygons).toEqual([triangle]);
+    expect(result.stamps).toEqual([]);
+  });
+
+  it('replaces the circle with the LOS polygon for obstructed emitters', () => {
+    const result = resolveActiveVision([reveal('a'), reveal('b')], [polygon('a')], 64);
+
+    expect(result.polygons).toEqual([triangle]);
+    expect(result.stamps.map((s) => s.id)).toEqual(['b']);
+  });
+
+  it('ignores polygons whose emitter is not in the reveal set (e.g. DM player-view preview)', () => {
+    const result = resolveActiveVision([reveal('a')], [polygon('enemy')], 64);
+
+    expect(result.polygons).toEqual([]);
+    expect(result.stamps.map((s) => s.id)).toEqual(['a']);
+  });
+
+  it('falls back to the circle for degenerate polygons', () => {
+    const result = resolveActiveVision([reveal('a')], [polygon('a', triangle.slice(0, 2))], 64);
+
+    expect(result.polygons).toEqual([]);
+    expect(result.stamps).toHaveLength(1);
+  });
+
+  it('draws nothing for an emitter with zero vision even if a polygon exists', () => {
+    const result = resolveActiveVision([reveal('a', 0)], [polygon('a')], 64);
+
+    expect(result.polygons).toEqual([]);
+    expect(result.stamps).toEqual([]);
   });
 });

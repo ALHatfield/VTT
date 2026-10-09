@@ -7,7 +7,7 @@ import { prisma } from '../../shared/db/prisma.js';
  */
 function toCharacter(raw: {
   id: string;
-  campaignId: string;
+  campaignId: string | null;
   userId: string;
   name: string;
   race: string;
@@ -19,6 +19,10 @@ function toCharacter(raw: {
   ac: number;
   proficiencyBonus: number;
   speed: number;
+  skillProficiencies: unknown;
+  attacks: unknown;
+  spells: unknown;
+  spellSlots: unknown;
   portraitUrl: string | null;
   biography: string | null;
   createdAt: Date;
@@ -38,6 +42,10 @@ function toCharacter(raw: {
     ac: raw.ac,
     proficiencyBonus: raw.proficiencyBonus,
     speed: raw.speed,
+    skillProficiencies: raw.skillProficiencies as Character['skillProficiencies'],
+    attacks: raw.attacks as Character['attacks'],
+    spells: raw.spells as Character['spells'],
+    spellSlots: raw.spellSlots as Character['spellSlots'],
     portraitUrl: raw.portraitUrl,
     biography: raw.biography,
     createdAt: raw.createdAt,
@@ -46,12 +54,12 @@ function toCharacter(raw: {
 }
 
 /**
- * List all characters in a campaign.
+ * List all characters in a campaign, plus global templates (campaignId null).
  * Players see all characters; the caller may filter by role at the route level.
  */
 export async function listCharacters(campaignId: string): Promise<Character[]> {
   const characters = await prisma.character.findMany({
-    where: { campaignId },
+    where: { OR: [{ campaignId }, { campaignId: null }] },
     orderBy: { name: 'asc' },
   });
 
@@ -59,14 +67,14 @@ export async function listCharacters(campaignId: string): Promise<Character[]> {
 }
 
 /**
- * Get a single character by ID within a campaign
+ * Get a single character by ID — campaign-scoped, or a global template
  */
 export async function getCharacter(
   campaignId: string,
   characterId: string,
 ): Promise<Character | null> {
   const character = await prisma.character.findFirst({
-    where: { id: characterId, campaignId },
+    where: { id: characterId, OR: [{ campaignId }, { campaignId: null }] },
   });
 
   return character ? toCharacter(character) : null;
@@ -94,6 +102,10 @@ export async function createCharacter(
       ac: data.ac,
       proficiencyBonus: data.proficiencyBonus,
       speed: data.speed,
+      skillProficiencies: data.skillProficiencies,
+      attacks: data.attacks,
+      spells: data.spells,
+      spellSlots: data.spellSlots,
       portraitUrl: data.portraitUrl ?? null,
       biography: data.biography ?? null,
     },

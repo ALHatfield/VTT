@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { app } from '../../app.js';
 import { prisma } from '../../shared/db/prisma.js';
+import { loginAs } from '../../shared/test-utils/login.js';
 import { hashPassword } from '../../shared/utils/password.js';
 
 async function createUser(overrides?: { username?: string; email?: string }): Promise<{
@@ -20,11 +21,6 @@ async function createUser(overrides?: { username?: string; email?: string }): Pr
     },
   });
   return { id: user.id, email: user.email, password };
-}
-
-async function loginAs(email: string, password: string): Promise<string[]> {
-  const res = await request(app).post('/api/auth/login').send({ email, password });
-  return res.headers['set-cookie'] as unknown as string[];
 }
 
 async function createCampaign(cookies: string[]): Promise<string> {

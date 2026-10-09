@@ -5,29 +5,30 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
-  ChatReceivedPayload,
-  DrawClearedPayload,
-  DrawStrokeRelayedPayload,
-  FogHiddenPayload,
-  FogRevealedPayload,
-  InitiativeUpdatedPayload,
-  MeasureBroadcastPayload,
-  PresencePayload,
-  SocketErrorPayload,
-  TokenMovedPayload,
+    ChatReceivedPayload,
+    DrawClearedPayload,
+    DrawStrokeRelayedPayload,
+    FogHiddenPayload,
+    FogRevealedPayload,
+    InitiativeUpdatedPayload,
+    MeasureBroadcastPayload,
+    PresencePayload,
+    SocketErrorPayload,
+    TokenMovedPayload,
 } from '@vtt/shared';
 import {
-  AURA_EVENTS,
-  CHAT_EVENTS,
-  DRAW_EVENTS,
-  FOG_EVENTS,
-  INITIATIVE_EVENTS,
-  MEASURE_EVENTS,
-  PLAY_AREA_EVENTS,
+    AURA_EVENTS,
+    CHAT_EVENTS,
+    DRAW_EVENTS,
+    FOG_EVENTS,
+    INITIATIVE_EVENTS,
+    MEASURE_EVENTS,
+    PLAY_AREA_EVENTS,
 } from '@vtt/shared';
 
 import { app, httpServer } from '../../app.js';
 import { prisma } from '../../shared/db/prisma.js';
+import { loginAsHeader as loginAs } from '../../shared/test-utils/login.js';
 import { hashPassword } from '../../shared/utils/password.js';
 
 let SERVER_URL: string;
@@ -90,12 +91,6 @@ async function createUser(overrides?: {
     },
   });
   return { id: user.id, email: user.email, password };
-}
-
-async function loginAs(email: string, password: string): Promise<string> {
-  const res = await request(app).post('/api/auth/login').send({ email, password });
-  const cookies = res.headers['set-cookie'] as unknown as string[];
-  return cookies.join('; ');
 }
 
 async function createCampaign(cookieHeader: string): Promise<string> {

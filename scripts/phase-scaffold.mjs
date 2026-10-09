@@ -56,6 +56,12 @@ function toCamelCase(slug) {
   return pascal.charAt(0).toLowerCase() + pascal.slice(1);
 }
 
+/** PascalCase pluralized — already-plural slugs (e.g. "campaigns") are left as-is */
+function toPluralPascalCase(slug) {
+  const pascal = toPascalCase(slug);
+  return pascal.endsWith('s') ? pascal : `${pascal}s`;
+}
+
 async function fileExists(filePath) {
   try {
     await fs.access(filePath);
@@ -180,19 +186,19 @@ describe('${pascal} Routes', () => {
 }
 
 function generateHook(slug, phaseId) {
-  const pascal = toPascalCase(slug);
+  const plural = toPluralPascalCase(slug);
   const camel = toCamelCase(slug);
   return `import { useCallback, useEffect, useState } from 'react';
 
 /**
  * Hook for fetching ${camel} data — Phase ${phaseId}
  */
-export function use${pascal}s(): { data: unknown[]; loading: boolean; error: string | null } {
+export function use${plural}(): { data: unknown[]; loading: boolean; error: string | null } {
   const [data, setData] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetch${pascal}s = useCallback(async () => {
+  const fetch${plural} = useCallback(async () => {
     try {
       setLoading(true);
       // TODO: implement fetch
@@ -205,8 +211,8 @@ export function use${pascal}s(): { data: unknown[]; loading: boolean; error: str
   }, []);
 
   useEffect(() => {
-    void fetch${pascal}s();
-  }, [fetch${pascal}s]);
+    void fetch${plural}();
+  }, [fetch${plural}]);
 
   return { data, loading, error };
 }
@@ -250,9 +256,9 @@ async function scaffoldClient(slug, phaseId, dryRun) {
   const featureDir = path.join(ROOT_DIR, 'client', 'src', 'features', slug);
   const hooksDir = path.join(featureDir, 'hooks');
 
-  const pascal = toPascalCase(slug);
+  const plural = toPluralPascalCase(slug);
 
-  await writeIfNew(path.join(hooksDir, `use${pascal}s.ts`), generateHook(slug, phaseId), dryRun);
+  await writeIfNew(path.join(hooksDir, `use${plural}.ts`), generateHook(slug, phaseId), dryRun);
 }
 
 async function main() {
